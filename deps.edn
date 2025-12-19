@@ -1,9 +1,25 @@
 {:aliases  {:dev {:extra-paths ["development/src"]
 
-                  :extra-deps {org.clojure/clojure {:mvn/version "1.12.0"}}}
+                  :extra-deps {djblue/portal {:mvn/version "0.51.1"}
+                               party.donut/system {:mvn/version "1.0.257"}
 
-            :test {:extra-paths []}
+                               poly/user {:local/root "components/user"}
+                               poly/media-ingest {:local/root "components/media-ingest"}
+                               poly/media-converter {:local/root "components/media-converter"}
 
+                               poly/database {:local/root "components/database"}
+
+                               org.clojure/tools.namespace {:mvn/version "1.5.0"}
+                               org.clojure/clojure {:mvn/version "1.12.0"}}}
+
+            :test {:extra-paths ["components/user/test"
+                                 "components/media-ingest/test"
+                                 "components/media-converter/test"
+
+                                 "components/database/test"]}
+
+            :xtdb {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
+                              "-Dio.netty.tryReflectionSetAccessible=true"]}
             :poly {:main-opts ["-m" "polylith.clj.core.poly-cli.core"]
                    :extra-deps {polylith/clj-poly {:mvn/version "0.2.22"}}}}}
 

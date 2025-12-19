@@ -10,5 +10,21 @@ You can also get in touch with the Polylith Team on [Slack](https://clojurians.s
 
 <h1>media-maniac</h1>
 
-<p>Add your workspace documentation here...</p>
+### Setup
 
+1. Install xxhash
+
+```
+brew install xxhash
+```
+
+2. Install container manager on synology nas
+3. Enable ssh on the NAS
+4. Generate a key set on OSX
+
+```
+ssh-keygen -t ed25519 -C "something@user"
+```
+
+5. Save the key to something like id_ed25519_nas
+6. Install the pub key on the nas at: ~/.ssh/authorized_keys

@@ -1,12 +1,17 @@
 {
-    "calva.replConnectSequences": [
-        {
-            "projectType": "deps.edn",
-            "name": "media-maniac",
-            "cljsType": "none",
-            "menuSelections": {
-                "cljAliases": ["dev", "test", "+default"]
-            }
-        }
-    ]
+  "calva.replConnectSequences": [
+    {
+      "projectType": "deps.edn",
+      "name": "media-maniac",
+      "cljsType": "none",
+      "autoSelectForJackIn": true,
+      "afterCLJReplJackInCode": "(do ((requiring-resolve 'system/start-dev)))",
+      "menuSelections": {
+        "cljAliases": ["dev", "test", "+default"]
+      }
+    }
+  ],
+
+  "calva.autoConnectRepl": true,
+  "calva.autoOpenJackInTerminal": true
 }

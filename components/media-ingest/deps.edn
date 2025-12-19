@@ -1,0 +1,7 @@
+{:paths ["src" "resources"]
+ :deps {com.datomic/local    {:mvn/version "1.0.291"}
+        cheshire/cheshire {:mvn/version "6.0.0"}
+        org.lz4/lz4-java {:mvn/version "1.8.0"}}
+ :aliases {:test {:extra-paths ["test"]
+                  :extra-deps {}}}}
+
