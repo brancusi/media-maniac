@@ -40,3 +40,21 @@ projects/**/pom.xml
 .calva/repl.calva-repl
 
 refs
+
+# Portal exclude
+.portal
+
+# User defined
+.secrets.edn
+
+tmp
+db_data
+datomic_data
+db_dump
+weaviate_data
+
+.env
+
+.clerk
+
+.datomic-ions

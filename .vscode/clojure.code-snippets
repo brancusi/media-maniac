@@ -1,0 +1,26 @@
+{
+  "Spy": {
+    "prefix": "ispy",
+    "body": "[debug :as debug :refer [spy spy-when spy-present stash peek-stash]]"
+  },
+  
+  "Add lib": {
+    "prefix": "add",
+    "body": "(comment \n(require '[clojure.repl.deps :as deps])$2\n(deps/add-lib '$1)\n\n;\n)$3"
+  },
+  
+  "Apropos": {
+    "prefix": "apr",
+    "body": "(do \n(require '[clojure.repl :as repl])$2\n(repl/apropos '$1)\n\n;\n)$3"
+  },
+
+  "DB call with active system": {
+    "prefix": "system-db-call",
+    "body": "(comment \n(require '[system :as system])\n(let [db (-> (system/get-instances) :persistance :datasource)]\n ($1 db$2))\n\n;\n)"
+  },
+
+  "Inspect portal selection": {
+    "prefix": "port-inspect",
+    "body": "(comment \n(require '[system :as system])\n@(system/get-system-portal)$1\n\n;\n)"
+  }
+}

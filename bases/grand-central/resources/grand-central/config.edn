@@ -1,0 +1,23 @@
+{:env #or [#env ENV :dev]
+
+ ;;  Local development 
+ :local #include "grand-central/.secrets.edn"
+
+ :persistance {:datomic {:connection-settings {}
+                         :db-name "main"}}
+
+ :open-ai {:api-key #ref [:local :open-ai :api-key]}
+
+ :xtdb-config {:log [:local
+                     {;; -- required
+                      ;; accepts `String`, `File` or `Path`
+                      :path "./tmp/mm/log"
+
+                      ;; -- optional
+
+                      ;; accepts `java.time.InstantSource`
+                      ;; :instant-src (InstantSource/system)
+
+                      ;; :buffer-size 4096
+                      ;; :poll-sleep-duration "PT1S"
+                      }]}}

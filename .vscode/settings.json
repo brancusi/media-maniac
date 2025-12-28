@@ -5,9 +5,11 @@
       "name": "media-maniac",
       "cljsType": "none",
       "autoSelectForJackIn": true,
+      "autoSelectForConnect": true,
+      "projectRootPath": ["."],
       "afterCLJReplJackInCode": "(do ((requiring-resolve 'system/start-dev)))",
       "menuSelections": {
-        "cljAliases": ["dev", "test", "+default"]
+        "cljAliases": ["dev", "xtdb", "test", "+default"]
       }
     }
   ],

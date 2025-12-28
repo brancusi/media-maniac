@@ -93,11 +93,6 @@
   [file-path]
   (file-utils/get-file-name file-path))
 
-(defn ensure-dir-exists!
-  "Ensures that the directory portion of the file path exists. Create all missing dirs along the path"
-  [file-path]
-  (file-utils/ensure-dir-exists! file-path))
-
 (defn ensure-file-exists!
   "Ensures that the file exists. Create all missing dirs along the path and the file."
   [file-path]
@@ -143,7 +138,6 @@
 (defn force-int
   [str-or-int]
   (string-utils/force-int str-or-int))
-
 
 (defn get-url-host
   "Extracts the host from a given URL string.
@@ -232,10 +226,7 @@
   [url]
   (url-utils/strip-trailing-slash url))
 
-
-(comment
-
-
-
-  ;;Keep from folding
-  )
+(defn hash-file
+  "Generates a hash for a file."
+  [file]
+  (file-utils/hash-file file))

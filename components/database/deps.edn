@@ -1,5 +1,10 @@
 {:paths ["src" "resources"]
- :deps {}
+ :deps {com.xtdb/xtdb-api {:mvn/version "2.x-SNAPSHOT"}
+        com.xtdb/xtdb-core {:mvn/version "2.x-SNAPSHOT"}
+        org.apache.arrow.adbc/adbc-driver-flight-sql {:mvn/version "0.20.0"}
+        org.apache.arrow/arrow-memory-netty {:mvn/version "18.3.0"}
+        com.cognitect/transit-clj {:mvn/version "1.0.333"}
+        org.clojure/data.json {:mvn/version "2.5.0"}}
  :aliases {:test {:extra-paths ["test"]
                   :extra-deps {}}}}
 

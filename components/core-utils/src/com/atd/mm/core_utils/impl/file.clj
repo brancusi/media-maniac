@@ -1,6 +1,9 @@
 (ns com.atd.mm.core-utils.impl.file
-  (:require [clojure.java.io :as io]
-            [clojure.string :refer [split join]]))
+  (:require
+   [clojure.java.io :as io]
+   [clojure.string :refer [split]])
+  (:import
+   [com.dynatrace.hash4j.file FileHashing]))
 
 (def type-map {"image/jpg" "jpg"
                "image/jpeg" "jpg"
@@ -26,8 +29,6 @@
     (if-let [matched (re-matches (re-pattern #"^(.*?)(\/[^\/]*\.[^\/]*)$") path)]
       (second matched)
       path)))
-
-
 
 (defn get-path-parts
   "Parses a file path to return the directory and filename separately.
@@ -56,25 +57,6 @@
       (first (split file-name #"\."))
       nil)))
 
-(defn ensure-dir-exists!
-  "Ensures that the directory portion of the file path exists.
-   Create all missing dirs along the path"
-  [file-path]
-  (let [{:keys [dir]} (get-path-parts file-path)
-        segments (split dir #"/")]
-    (reduce (fn [acc cur]
-              (let [prev-in-resource (io/file acc)
-                    prev-resource-exists? (boolean prev-in-resource)
-                    next-file-attempt (io/file prev-in-resource cur)
-                    next-exists? (when next-file-attempt
-                                   (.exists next-file-attempt))]
-                (when (not next-exists?)
-                  (when (and prev-resource-exists?
-                             next-file-attempt)
-                    (.mkdirs next-file-attempt)))
-                (join "/" [acc cur])))
-            segments)))
-
 (defn path-exists?
   [file-path]
   (println (str "Checking if path exists: " file-path " " (io/resource file-path)))
@@ -84,7 +66,7 @@
   "Ensures that the file exists. Create all missing dirs along the path and the file."
   [file-path]
   (let [{:keys [dir file-name]} (get-path-parts file-path)
-        _ (ensure-dir-exists! file-path)
+        _ (io/make-parents file-path)
         file (io/file (io/resource file-path))]
     (if file
       file
@@ -101,3 +83,27 @@
 (defn spit-with-dirs [file-path content]
   (ensure-file-exists! file-path)
   (spit file-path content))
+
+(defn hash-file
+  "Generates a hash for a file."
+  [file]
+  (let [hv (.hashFileTo128Bits
+            (FileHashing/imohash1_0_2)
+            (io/file file))]
+    (format "%016x%016x"
+            (.getMostSignificantBits hv)
+            (.getLeastSignificantBits hv))))
+
+(comment
+
+  (hash-file "/Users/atd/Desktop/tokyo.mp4")
+
+  ;;Keep from folding
+  )
+
+(comment
+  (require '[clojure.repl.deps :as deps])
+  (deps/add-lib 'com.dynatrace.hash4j/hash4j)
+
+;
+  )

@@ -1,25 +1,48 @@
 {:aliases  {:dev {:extra-paths ["development/src"]
 
-                  :extra-deps {djblue/portal {:mvn/version "0.51.1"}
+                  :extra-deps {djblue/portal {:mvn/version "0.62.1"}
                                party.donut/system {:mvn/version "1.0.257"}
+
+                               org.clojure/tools.deps {:mvn/version "0.27.1564"}
+
+
+                               ;;    Bases
+                               poly/grand-central {:local/root "bases/grand-central"}
+
+
+                               ;;    Components
 
                                poly/user {:local/root "components/user"}
                                poly/media-ingest {:local/root "components/media-ingest"}
                                poly/media-converter {:local/root "components/media-converter"}
 
+                               poly/core-utils {:local/root "components/core-utils"}
                                poly/database {:local/root "components/database"}
+                               poly/config {:local/root "components/config"}
+                               poly/http-client {:local/root "components/http-client"}
 
                                org.clojure/tools.namespace {:mvn/version "1.5.0"}
-                               org.clojure/clojure {:mvn/version "1.12.0"}}}
+                               org.clojure/clojure {:mvn/version "1.12.4"}}}
 
-            :test {:extra-paths ["components/user/test"
+            :test {:extra-paths [;;      Bases
+                                 "bases/grand-central/test"
+
+                                 ;;      Components
+                                 "components/user/test"
                                  "components/media-ingest/test"
                                  "components/media-converter/test"
+                                 "components/core-utils/test"
+                                 "components/database/test"
+                                 "components/config/test"
+                                 "components/http-client/test"
 
-                                 "components/database/test"]}
+                                 ;;      
+                                 ]}
+
 
             :xtdb {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
-                              "-Dio.netty.tryReflectionSetAccessible=true"]}
+                              "-Dio.netty.tryReflectionSetAccessible=true"
+                              "--enable-native-access=ALL-UNNAMED"]}
             :poly {:main-opts ["-m" "polylith.clj.core.poly-cli.core"]
-                   :extra-deps {polylith/clj-poly {:mvn/version "0.2.22"}}}}}
+                   :extra-deps {polylith/clj-poly {:mvn/version "0.3.31"}}}}}
 

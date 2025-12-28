@@ -1,4 +1,4 @@
 {:paths ["src" "resources"]
- :deps {}
+ :deps {com.dynatrace.hash4j/hash4j {:mvn/version "0.28.0"}}
  :aliases {:test {:extra-paths ["test"]
                   :extra-deps {}}}}
