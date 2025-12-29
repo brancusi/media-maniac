@@ -1,5 +1,5 @@
 ### Steps
-	- Pre process the rules and update with UUIDs
+	- DONE Pre process the rules and update with UUIDs
 	  logseq.order-list-type:: number
 	- Amend with the source file
 	  logseq.order-list-type:: number

@@ -5,33 +5,32 @@
    [clojure.string :as str]
    [com.atd.mm.media-converter.processors.core :refer [process-rule]]
    [com.atd.mm.media-converter.processors.interface]
+
    [ubergraph.core :as uber]
-   [debug :as debug :refer [spy spy-when spy-present stash peek-stash]]
-   [com.rpl.specter :refer [transform MAP-VALS ALL filterer select setval]]
+
    [com.atd.mm.core-utils.interface :as cu]))
 
+#_(defn update-rule-deps
+    [data old-id new-id]
+    (setval [(filterer #(:deps %))
+             ALL
+             :deps
+             (filterer #(= % old-id))
+             ALL]
+            new-id
+            data))
 
-(defn update-rule-deps
-  [data old-id new-id]
-  (setval [(filterer #(:deps %))
-           ALL
-           :deps
-           (filterer #(= % old-id))
-           ALL]
-          new-id
-          data))
-
-(defn prepare-rules
-  [data]
-  (let [keys (select [ALL :id] data)]
-    (reduce (fn [acc old-id]
-              (let [new-id (str (java.util.UUID/randomUUID))
-                    updated-data (setval [(filterer #(= (:id %) old-id)) ALL :id]
-                                         new-id
-                                         acc)]
-                (update-rule-deps updated-data old-id new-id)))
-            data
-            keys)))
+#_(defn prepare-rules
+    [data]
+    (let [keys (select [ALL :id] data)]
+      (reduce (fn [acc old-id]
+                (let [new-id (java.util.UUID/randomUUID)
+                      updated-data (setval [(filterer #(= (:id %) old-id)) ALL :id]
+                                           new-id
+                                           acc)]
+                  (update-rule-deps updated-data old-id new-id)))
+              data
+              keys)))
 
 (defn convert-resolution-to-file-name
   [str-resolution]
@@ -216,22 +215,22 @@
      :frames-result frames-result
      :frames-directory frames-dir}))
 
-(comment
+#_(comment
 
-  (process-rule {:type :proxy
-                 :opts {:hey :son}})
+    (process-rule {:type :proxy
+                   :opts {:hey :son}})
 
-  (process-rule {:type :copy
-                 :opts {:hey :copy}})
+    (process-rule {:type :copy
+                   :opts {:hey :copy}})
 
-  (process-rule {:type :stills
-                 :opts {:hey :stills}})
+    (process-rule {:type :stills
+                   :opts {:hey :stills}})
 
-  (process-rule {:type :transcribe
-                 :opts {:hey :trans}})
+    (process-rule {:type :transcribe
+                   :opts {:hey :trans}})
 
-  ;;Keep from folding
-  )
+    ;;Keep from folding
+    )
 
 (defn process-video
   [file & {:keys [rules]}]
@@ -240,66 +239,40 @@
       (process-rule rule))
     src-hash))
 
-(def rules [{:id "proxy-720"
-             :type :media/proxy
-             :opts {:size 720
-                    :name "_proxy_%name.%ext"}}
-            {:id "extract-stills"
-             :deps ["proxy-720"]
-             :type :media/extract-stills
-             :opts {:frequency 10
-                    :size 320
-                    :quality 1
-                    :type "jpg"
-                    :name "%name_%frame.%ext"}}
-            {:id "extract-audio"
-             :type :media/extract-audio
-             :opts {:encoding "wav"
-                    :bitrate 42000
-                    :dest "/audio"
-                    :name "%name_.%ext"}}
-            {:id "transcribe"
-             :deps ["extract-audio" "proxy-720"]
-             :type :media/transcribe
-             :opts {:model :whisper}}
-            {:id "copy"
-             :type :media/copy
-             :opts {:dest "/here"}}])
+#_(defn build-b
+    [self-id deps]
+    (mapv (fn [in]
+            [in self-id]) deps))
 
+#_(defn build-a
+    [rule]
+    (let [id (:id rule)
+          deps (:deps rule)
+          has-deps? (seq deps)]
+      (if has-deps?
+        (into [[id rule]] (build-b id deps))
+        [[id rule]])))
 
-(defn build-b
-  [self-id deps]
-  (mapv (fn [in]
-          [in self-id]) deps))
+#_(defn rules->ubergraph
+    [rules]
+    (let [data (vec (concat (mapcat build-a rules)))]
+      (apply uber/digraph data)))
 
-(defn build-a
-  [rule]
-  (let [id (:id rule)
-        deps (:deps rule)
-        has-deps? (seq deps)]
-    (if has-deps?
-      (into [[id rule]] (build-b id deps))
-      [[id rule]])))
-
-(defn rules->ubergraph
-  [rules]
-  (let [data (vec (concat (mapcat build-a rules)))]
-    (apply uber/digraph data)))
-
-(defn root-nodes
-  "Get the root nodes of the graph. No deps"
-  [g]
-  (let [nodes (uber/nodes g)]
-    (filter (fn [node]
-              (nil? (uber/predecessors g node))) nodes)))
+#_(defn root-nodes
+    "Get the root nodes of the graph. No deps"
+    [g]
+    (let [nodes (uber/nodes g)]
+      (filter (fn [node]
+                (nil? (uber/predecessors g node))) nodes)))
 
 (comment
-  (prepare-rules rules)
+  (-> (prepare-rules rules)
+      pipeline-valid?)
 
   (uber/pprint
    (rules->ubergraph (prepare-rules rules)))
 
-  (-> (rules->ubergraph (prepare-rules rules))
+  (-> (rules->ubergraph rules)
       root-nodes)
 
 ;
