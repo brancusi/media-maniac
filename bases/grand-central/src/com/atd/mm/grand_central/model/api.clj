@@ -25,8 +25,20 @@
         pipeline-tx-data {:xt/id (:xt/id pipeline)
                           :src (:src pipeline)
                           :processes process-ids}]
-    (xt/submit-tx xtdb-node (spy [(into [:put-docs :processes] processes-tx-data)
-                                  [:put-docs :pipelines pipeline-tx-data]]))))
+    (xt/submit-tx xtdb-node [(into [:put-docs :processes] processes-tx-data)
+                             [:put-docs :pipelines pipeline-tx-data]])))
+
+
+(defn get-all-pipelines
+  [& {:keys [xtdb-node]}]
+  (let [xtdb-node (or xtdb-node (resolver/get-xtdb-node))]
+    (xt/q xtdb-node '(from :pipelines [*]))))
+
+(defn get-all-processes
+  [& {:keys [xtdb-node]}]
+  (let [xtdb-node (or xtdb-node (resolver/get-xtdb-node))]
+    (xt/q xtdb-node '(from :processes [*]))))
+
 
 (defn get-process-by-id
   [id & {:keys [xtdb-node]}]
@@ -50,6 +62,10 @@
 
 
 (comment
+
+  (get-all-pipelines)
+
+  (get-all-processes)
 
   (get-ready-to-process)
 

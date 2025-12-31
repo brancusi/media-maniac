@@ -1,0 +1,27 @@
+#/etc/rabbitmq/enabled_plugins = location of file in image
+#
+services:
+  rabbitmq:
+    build:
+      context: .
+      dockerfile: rabbitmq/Dockerfile
+      args:
+        DELAYED_PLUGIN_VERSION: "4.2.0"
+    container_name: rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+    configs:
+      - source: plugins
+        target: /etc/rabbitmq/enabled_plugins
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+configs:
+  plugins:
+    content: "[rabbitmq_management, rabbitmq_mqtt, rabbitmq_delayed_message_exchange]."  
+
+networks:
+  default:
+    driver: bridge

@@ -5,6 +5,7 @@
 (def Rule
   [:map
    [:xt/id :uuid]
+   [:status [:enum :open :processing :completed]]
    [:opts {:optional true} :map]
    [:type [:enum :media/proxy
            :media/extract-audio
@@ -33,16 +34,17 @@
   [data]
   (let [rules (:rules data)
         keys (select [ALL :xt/id] rules)
-        updated-rules (reduce (fn [acc old-id]
-                                (let [new-id (java.util.UUID/randomUUID)
-                                      updated-rules (setval [(filterer #(= (:xt/id %) old-id)) ALL :xt/id]
-                                                            new-id
-                                                            acc)]
-                                  (update-rule-deps updated-rules old-id new-id)))
-                              rules
-                              keys)]
+        rules-with-uuids (reduce (fn [acc old-id]
+                                   (let [new-id (java.util.UUID/randomUUID)
+                                         updated-rules (setval [(filterer #(= (:xt/id %) old-id)) ALL :xt/id]
+                                                               new-id
+                                                               acc)]
+                                     (update-rule-deps updated-rules old-id new-id)))
+                                 rules
+                                 keys)
+        rules-with-open-status (mapv #(assoc % :status :open) rules-with-uuids)]
     (assoc data
-           :rules updated-rules
+           :rules rules-with-open-status
            :xt/id (java.util.UUID/randomUUID))))
 
 (defn pipeline-valid?

@@ -43,12 +43,18 @@
 
 (comment
 
+  (build-basic-pipeline "./tmp/sample.MP4")
+
   (let [prepped-pipeline (build-basic-pipeline "./tmp/sample.MP4")
         valid? (mc/pipeline-valid? prepped-pipeline)]
 
     (if valid?
       (api/create-pipeline prepped-pipeline)
       (tap> false)))
+  ;;=> {:tx-id 49056}
+  ;;=> Execution error (Incorrect) at xtdb.error/incorrect (error.clj:25).
+  ;;   expected :xt/id or "_id" in doc
+  ;;   
   ;;=> Execution error (Incorrect) at xtdb.error/incorrect (error.clj:25).
   ;;   expected :xt/id or "_id" in doc
   ;;   

@@ -1,0 +1,3 @@
+- Open console
+- http://localhost:15672/
+-

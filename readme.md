@@ -1,30 +1,18 @@
-<img src="logo.png" width="30%" alt="Polylith" id="logo">
+<h1>media-maniac</h1>
 
-The Polylith documentation can be found here:
+App uses Polylith
 
 - The [high-level documentation](https://polylith.gitbook.io/polylith)
-- The [poly tool documentation](https://cljdoc.org/d/polylith/clj-poly/CURRENT)
-- The [RealWorld example app documentation](https://github.com/furkan3ayraktar/clojure-polylith-realworld-example-app)
 
-You can also get in touch with the Polylith Team on [Slack](https://clojurians.slack.com/archives/C013B7MQHJQ).
+### Docs
 
-<h1>media-maniac</h1>
+Main docs are kept in [Logseq](https://logseq.com/) open the graph and point to the docs folder
 
 ### Setup
 
-1. Install xxhash
+Start docker
+Run docker-compose for the base you are working with. Example for grand-central
 
+```bash
+docker compose -f bases/grand-central/docker-compose.yaml up
 ```
-brew install xxhash
-```
-
-2. Install container manager on synology nas
-3. Enable ssh on the NAS
-4. Generate a key set on OSX
-
-```
-ssh-keygen -t ed25519 -C "something@user"
-```
-
-5. Save the key to something like id_ed25519_nas
-6. Install the pub key on the nas at: ~/.ssh/authorized_keys

@@ -15,6 +15,7 @@
                                poly/user {:local/root "components/user"}
                                poly/media-ingest {:local/root "components/media-ingest"}
                                poly/media-converter {:local/root "components/media-converter"}
+                               poly/job-runner {:local/root "components/job-runner"}
 
                                poly/core-utils {:local/root "components/core-utils"}
                                poly/database {:local/root "components/database"}
@@ -31,6 +32,8 @@
                                  "components/user/test"
                                  "components/media-ingest/test"
                                  "components/media-converter/test"
+                                 "components/job-runner/test"
+
                                  "components/core-utils/test"
                                  "components/database/test"
                                  "components/config/test"

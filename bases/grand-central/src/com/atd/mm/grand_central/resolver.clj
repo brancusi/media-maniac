@@ -39,7 +39,6 @@
                                                              (unnest {dep-id deps})))))})))]
     (filter all-process-deps-completed? open-processes)))
 
-
 (comment
 
   (every? process-completed? [{:status :completed}])
