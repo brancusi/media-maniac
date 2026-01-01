@@ -6,14 +6,6 @@
    [goose.client :as c]
    [goose.worker :as w]))
 
-(defn job-by-tx-id
-  [tx-id redis-producer]
-  (let [results (enqueued-jobs/find-by-pattern redis-producer
-                                               :heavy-process (fn [job]
-                                                                (tap> job)
-                                                                (= (-> job :args first :id) tx-id)))]
-    (first (seq results))))
-
 (defn my-fn
   [args]
   (tap> args)
@@ -24,66 +16,75 @@
   (let [opts (or opts rds/default-opts)]
     (rds/new-producer opts)))
 
+(defn create-worker
+  [producer & {:keys [threads queue]}]
+  (let [client-opts (assoc w/default-opts
+                           :broker producer
+                           :threads (or threads 1)
+                           :queue (or queue "default"))]
+    (w/start client-opts)))
+
+(defn stop-worker
+  [worker]
+  (w/stop worker))
+
 (defn queue-job
-  [handler-function & {:keys [args producer queue]}]
+  [handler-function fn-args {:keys [producer queue]}]
   (let [producer (or producer (create-producer))
         queue (or queue "default")
         client-opts (assoc c/default-opts
                            :broker producer
                            :queue queue)]
 
-    (tap> {:client-opts client-opts
-           :prodecer producer
-           :handler-function handler-function
-           :args args})
+    (c/perform-async client-opts handler-function fn-args)))
 
-    (c/perform-async client-opts handler-function args)))
+(defn clear-all-jobs
+  [& {:keys [producer
+             queue]}]
+  (let [producer (or producer (create-producer))]
+    (if queue
+      (enqueued-jobs/purge producer queue)
+      (doseq [q (enqueued-jobs/list-all-queues producer)]
+        (tap> q)
+        (enqueued-jobs/purge producer q)))))
 
+(defn job-by-tx-id
+  [tx-id & {:keys [producer queue]}]
+  (let [producer (or producer (create-producer))
+        queue (or queue "default")
+        match-fn (fn [job]
+                   (tap> job)
+                   (= (-> job :args first :id) tx-id))
+        results (enqueued-jobs/find-by-pattern producer queue match-fn)]
+    (first (seq results))))
 
 (comment
+  (queue-job 'my-fn
+             {:queue "hey-son"}
+             {:args {:id "hi"}})
 
-  (queue-job 'my-fn {:args {:id "hi"}})
-  ;;=> {:id "94267259-54d7-4aa8-bfba-5d149b005c1f"}
-  ;;=> {:id "52fdc881-b068-44e8-b6e4-25c4f5a7b9f5"}
-  ;;=> {:id "7ea6145e-795f-4195-8f22-930bc797f4f9"}
-  ;;=> {:id "c9b4d5ba-ff9b-440d-8af7-fc38e1475170"}
-  ;;=> {:id "6584ff60-b490-4fb6-8ca3-4aa8b2d38d6b"}
-  ;;=> {:id "557e30c7-659d-494e-b95e-cdf16c34af55"}
-  ;;=> {:id "8dd2ad4d-a1b7-44ef-9786-d15a7a9f594f"}
-  ;;=> {:id "0aecef0f-926c-4579-bb75-3a4c6af8eccd"}
-  ;;=> {:id "bc877068-8a7a-411e-98ec-6e2439f71585"}
-  ;;=> {:id "9ec50c9c-a881-4ab9-9859-9160d18c4ba0"}
+  (queue-job 'my-fn
+             {:queue "heavy-process"}
+             {:id "asdfkjhsdf"})
+
+  (job-by-tx-id "asdfkjhsdf" {:queue "heavy-process"})
+
+  (clear-all-jobs)
+  (clear-all-jobs {:queue "heavy-process"})
+  (clear-all-jobs {:queue "hey-son"})
 
   ;;Keep from folding
   )
 
-
 (def testind-uuid (java.util.UUID/randomUUID))
-
-(def redis-producer (rds/new-producer rds/default-opts))
-
-(job-by-tx-id testind-uuid redis-producer)
-;;=> nil
-
+(def redis-producer (create-producer))
 
 (enqueued-jobs/list-all-queues redis-producer)
 
-(enqueued-jobs/size redis-producer :heavy-process)
-
-
-
-(defn job-by-tx-id
-  [tx-id]
-  (let [results (enqueued-jobs/find-by-pattern redis-producer
-                                               :heavy-process #(= (-> % :args first :id) tx-id))]
-    (first (seq results))))
+(enqueued-jobs/size redis-producer "heavy-process")
 
 (job-by-tx-id (java.util.UUID/randomUUID))
 
-(enqueued-jobs/purge redis-producer :heavy-process)
-;;=> Execution error (ArityException) at com.atd.mm.job-runner.interface/eval66181 (interface.clj:74).
-;;   Wrong number of args (2) passed to: goose.api.enqueued-jobs/find-by-pattern
-;;   
 
 ;; Get scheduled jobs
 (scheduled-jobs/find-by-pattern redis-producer 10)

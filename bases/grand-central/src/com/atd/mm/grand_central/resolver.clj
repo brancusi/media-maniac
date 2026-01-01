@@ -15,6 +15,14 @@
   []
   (-> (get-instances) :system :config))
 
+(defn get-job-runner
+  []
+  (-> (get-instances) :job-runner))
+
+(defn get-producer
+  []
+  (-> (get-job-runner) :job-runner :producer))
+
 (defn get-xtdb-node
   []
   (-> (get-instances) :database :node))
@@ -40,6 +48,8 @@
     (filter all-process-deps-completed? open-processes)))
 
 (comment
+
+  (-> (get-job-runner) :job-runner :producer)
 
   (every? process-completed? [{:status :completed}])
 

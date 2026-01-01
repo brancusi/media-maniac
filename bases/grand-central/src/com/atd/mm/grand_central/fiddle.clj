@@ -1,6 +1,7 @@
 (ns com.atd.mm.grand-central.fiddle
-  (:require [com.atd.mm.media-converter.interface :as mc]
-            [com.atd.mm.grand-central.model.api :as api]))
+   (:require [com.atd.mm.media-converter.interface :as mc]
+             [com.atd.mm.grand-central.model.api :as api]
+             [com.atd.mm.job-runner.interface :as job-runner])))
 
 
 (def rules [{:id "proxy-720"
