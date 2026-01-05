@@ -6,7 +6,9 @@
                      {:path "./tmp/mm/log"}]}
 
  :job-runner {:redis {:url "redis://localhost:6379"
-                      :pool-opts nil}
+                      :pool-opts {:max-total-per-key 10
+                                  :max-idle-per-key  10
+                                  :min-idle-per-key  2}}
               :workers [{:queue "default" :threads 5 :graceful-shutdown-sec 30}
                         {:queue "light-process" :threads 5 :graceful-shutdown-sec 30}
                         {:queue "heavy-process" :threads 1 :graceful-shutdown-sec 30}]}}

@@ -1,7 +1,7 @@
 - App uses Polylith: The [high-level documentation](https://polylith.gitbook.io/polylith)
 -
 - ## [[Job Runner]]
-- Run docker-compose for the base you are working with. Example for grand-central
+- Run docker-compose for the base you are working with. Example for grand-central. This should be run from the root of the project.
 - ```bash
   docker compose -f bases/grand-central/docker-compose.yaml up
   ```

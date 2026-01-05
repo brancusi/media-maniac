@@ -1,8 +1,7 @@
 (ns com.atd.mm.grand-central.fiddle
-   (:require [com.atd.mm.media-converter.interface :as mc]
-             [com.atd.mm.grand-central.model.api :as api]
-             [com.atd.mm.job-runner.interface :as job-runner])))
-
+  (:require [com.atd.mm.media-converter.interface :as mc]
+            [com.atd.mm.grand-central.model.api :as api]
+            [com.atd.mm.job-runner.interface :as job-runner]))
 
 (def rules [{:id "proxy-720"
              :type :media/proxy
@@ -52,20 +51,6 @@
     (if valid?
       (api/create-pipeline prepped-pipeline)
       (tap> false)))
-  ;;=> {:tx-id 49056}
-  ;;=> Execution error (Incorrect) at xtdb.error/incorrect (error.clj:25).
-  ;;   expected :xt/id or "_id" in doc
-  ;;   
-  ;;=> Execution error (Incorrect) at xtdb.error/incorrect (error.clj:25).
-  ;;   expected :xt/id or "_id" in doc
-  ;;   
-  ;;=> Execution error (Incorrect) at xtdb.error/incorrect (error.clj:25).
-  ;;   expected :xt/id or "_id" in doc
-  ;;   
-  ;;=> Execution error (Incorrect) at xtdb.error/incorrect (error.clj:25).
-  ;;   expected :xt/id or "_id" in doc
-  ;;   
-
 
   ;;Keep from folding
   )

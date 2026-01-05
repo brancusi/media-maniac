@@ -10,6 +10,7 @@
 
    [com.atd.mm.core-utils.interface :as cu]))
 
+
 #_(defn update-rule-deps
     [data old-id new-id]
     (setval [(filterer #(:deps %))
@@ -39,7 +40,6 @@
         height (second resolution)]
     {:w (cu/force-int width)
      :h (cu/force-int height)}))
-
 
 (defn generate-proxy
   [input-file & {:keys [output-file resolution]

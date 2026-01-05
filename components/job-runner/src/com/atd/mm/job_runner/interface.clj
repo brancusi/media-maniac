@@ -12,8 +12,8 @@
   (apply core/create-producer opts))
 
 (defn create-worker
-  [producer & args]
-  (apply core/create-worker producer args))
+  [& args]
+  (apply core/create-worker args))
 
 (defn stop-worker
   [worker]
@@ -26,6 +26,10 @@
 (defn clear-all-jobs
   [& opts]
   (apply core/clear-all-jobs opts))
+
+(defn get-all-jobs
+  [& opts]
+  (apply core/get-all-jobs opts))
 
 (comment
 
@@ -43,7 +47,7 @@
 
                    {:producer producer
                     :workers (mapv (fn [worker-config]
-                                     (create-worker producer worker-config))
+                                     (create-worker worker-config))
                                    (:workers job-runner))}))
         :stop (fn [{::ds/keys [instance]}]
                 (println "Stopping Redis related")

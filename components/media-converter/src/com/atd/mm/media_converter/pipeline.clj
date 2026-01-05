@@ -1,26 +1,8 @@
 (ns com.atd.mm.media-converter.pipeline
-  (:require [malli.core :as m]
-            [malli.generator :as mg]
-            [com.rpl.specter :refer [transform MAP-VALS ALL filterer select setval]]))
-(def Rule
-  [:map
-   [:xt/id :uuid]
-   [:status [:enum :open :processing :completed]]
-   [:opts {:optional true} :map]
-   [:type [:enum :media/proxy
-           :media/extract-audio
-           :media/extract-stills
-           :media/transcribe
-           :media/copy]]
-   [:deps {:optional true} [:vector :uuid]]])
+  (:require
+   [com.rpl.specter :refer [ALL filterer select setval]]))
 
-(def Pipeline
-  [:map
-   [:xt/id :uuid]
-   [:src :string]
-   [:rules [:vector #'Rule]]])
-
-(defn- update-rule-deps
+(defn- update-process-deps
   [data old-id new-id]
   (setval [(filterer #(:deps %))
            ALL
@@ -32,35 +14,41 @@
 
 (defn prepare-pipeline
   [data]
-  (let [rules (:rules data)
-        keys (select [ALL :xt/id] rules)
-        rules-with-uuids (reduce (fn [acc old-id]
-                                   (let [new-id (java.util.UUID/randomUUID)
-                                         updated-rules (setval [(filterer #(= (:xt/id %) old-id)) ALL :xt/id]
-                                                               new-id
-                                                               acc)]
-                                     (update-rule-deps updated-rules old-id new-id)))
-                                 rules
-                                 keys)
-        rules-with-open-status (mapv #(assoc % :status :open) rules-with-uuids)]
+  (let [pipe-line-xt-id (java.util.UUID/randomUUID) ;; Create a new pipeline uuid
+        processes (:processes data)
+        keys (select [ALL :xt/id] processes)
+        processes-with-uuids (reduce (fn [acc old-id]
+                                       (let [new-id (java.util.UUID/randomUUID)
+                                             updated-processes (setval [(filterer #(= (:xt/id %) old-id)) ALL :xt/id]
+                                                                       new-id
+                                                                       acc)]
+                                         (update-process-deps updated-processes old-id new-id)))
+                                     processes
+                                     keys)
+
+        ;; Augment with additional keys
+
+        ;; Add an open status to the process
+        processes-with-open-status (mapv #(assoc % :status :open) processes-with-uuids)
+
+        ;; Add the pipeline uuid to the process
+        processes-with-pipe-line-xt-id (mapv #(assoc % :pipeline-id pipe-line-xt-id) processes-with-open-status)]
+
+    ;; Add the pipeline uuid
     (assoc data
-           :rules rules-with-open-status
-           :xt/id (java.util.UUID/randomUUID))))
+           :processes processes-with-pipe-line-xt-id
+           :xt/id pipe-line-xt-id)))
 
-(defn pipeline-valid?
-  [pipeline]
-  (m/validate Pipeline pipeline))
+#_(comment
 
-(comment
+    (m/validate Pipeline [{:id #uuid "7697bd11-fab0-4240-8bde-f003e19e8518"
+                           :deps [#uuid "7697bd11-fab0-4240-8bde-f003e19e8518"
+                                  #uuid "37ddbd0d-6475-4b6a-b61e-32cc37f13a11"]
+                           :type :media/transcribe
+                           :opts {:model :whisper}}])
 
-  (m/validate Pipeline [{:id #uuid "7697bd11-fab0-4240-8bde-f003e19e8518"
-                         :deps [#uuid "7697bd11-fab0-4240-8bde-f003e19e8518"
-                                #uuid "37ddbd0d-6475-4b6a-b61e-32cc37f13a11"]
-                         :type :media/transcribe
-                         :opts {:model :whisper}}])
+    (->> (mg/generate Pipeline)
+         #_(m/validate Pipeline))
 
-  (->> (mg/generate Pipeline)
-       #_(m/validate Pipeline))
-
-  ;;Keep from folding
-  )
+    ;;Keep from folding
+    )
