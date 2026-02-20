@@ -1,0 +1,156 @@
+- # Media Maniac — Technical Overview
+- ## The Problem
+  - Managing a large and growing archive of raw media content is painful. Finding footage, generating review copies, and delivering clips to remote editors involves manual, repetitive work that doesn't scale.
+  - Media Maniac solves this by providing an automated pipeline for **ingesting**, **cataloging**, **processing**, and **delivering** media assets from a centralized archive.
+- ## What It Does
+  - **Ingest raw footage** from SD cards and other sources with full metadata extraction (camera type, codec, color science, picture profiles)
+  - **Generate proxies** — lightweight review copies in ProRes or other formats via FFmpeg
+  - **Extract frames** at intervals across videos, indexed for fast visual searching of footage
+  - **Extract audio** and send to transcription pipelines for searchable dialogue/narration
+  - **Create lossless subclips** so editors can receive only the sections they need, delivered from the cloud
+  - **Organize, tag, and transcribe** content so it can be mined efficiently
+  - **Verify file integrity** via hashing (imoHash, XXH3-64, SHA256) across local and remote storage (NAS)
+-
+- ## Tech Stack
+  - **Language:** Clojure (entire stack)
+  - **Architecture:** [[Polylith]] monorepo — components with clean interfaces and swappable implementations
+  - **Database:** [[XTDB]] v2 (bitemporal document database)
+  - **Component lifecycle:** [[Donut System]] (`party.donut/system`)
+  - **Job processing:** [[Goose]] (Redis-backed async job queue via `com.nilenso/goose`)
+  - **Media processing:** FFmpeg / FFprobe (shelled out from Clojure)
+  - **HTTP client:** Hato (Java 11+ HTTP client)
+  - **Config:** Aero (EDN config with environment-aware tagged literals)
+  - **Validation:** Malli (data-driven schemas)
+  - **Infrastructure:** Docker Compose (Redis, RedisInsight), local XTDB log storage
+-
+- ## Architecture
+  - ### Monorepo Structure (Polylith)
+    - **Top namespace:** `com.atd.mm`
+    - **1 Base:** `grand-central` — the deployable application entry point, system wiring, models, API
+    - **8 Components:** each with a clean `interface.clj` that delegates to implementation
+      - `config` — Aero-based EDN configuration reader
+      - `core-utils` — shared utilities (hashing, string ops, URL parsing, threading macros)
+      - `database` — XTDB v2 node lifecycle and schema definitions
+      - `http-client` — reusable Hato HTTP client
+      - `job-runner` — Goose Redis producer/consumer/worker management
+      - `media-converter` — FFmpeg proxy generation, frame extraction, DAG-based processing pipeline
+      - `media-ingest` — SD card analysis, FFprobe metadata extraction, camera/profile detection
+      - `user` — user management (scaffold)
+  - ### System Component Graph
+    - ```
+      config ──────────────┬──► database (XTDB node)
+                           ├──► job-runner (Redis producer + workers)
+                           └──► job-schedule (cron/scheduled jobs)
+      http-client ──────────── (standalone)
+      ```
+    - All wired together in `grand-central/system.clj` via donut.system `ds/ref` declarations
+  - ### Data Flow
+    - ```
+      SD Card / Source
+        │
+        ▼
+      media-ingest (ffprobe, hash, detect camera & profile)
+        │
+        ▼
+      Pipeline definition (process rules: proxy, stills, audio, transcribe, copy)
+        │
+        ▼
+      media-converter/prepare-pipeline (UUID assignment, dep rewiring via Specter)
+        │
+        ▼
+      grand-central model/pipeline (Malli validation → XTDB persistence)
+        │
+        ▼
+      job-runner (Goose queues: default, light-process, heavy-process)
+        │
+        ▼
+      Workers → media-converter/process-rule multimethod dispatch
+        │
+        ├─► :media/proxy          (FFmpeg proxy generation)
+        ├─► :media/extract-stills (frame extraction at intervals)
+        ├─► :media/extract-audio  (audio stream extraction)
+        ├─► :media/transcribe     (speech-to-text)
+        └─► :media/copy           (lossless copy/subclip)
+      ```
+-
+- ## Data Model
+  - Stored in XTDB v2 as documents. Schema defined in `com.atd.mm.database.schema`
+  - ### Entities
+    - **Media** — `:media/id`, `:media/original-filename`, `:media/file-type` (video/image/audio/raw), `:media/size-bytes`, timestamps
+    - **Hash** — `:hash/algorithm` (xxh3-64, sha256, md5), `:hash/value` (unique identity for dedup)
+    - **Location** — `:location/type` (sd-card, local-disk, nas, cloud), path, verification status
+    - **Transfer Job** — `:transfer/id`, status (pending/in-progress/completed/failed), bytes/files counters
+    - **Destination** — named destinations with base path, priority, pattern matching
+    - **Metadata** — camera EXIF (make, model, ISO, aperture, shutter), codec, color space, transfer, primaries, picture profile, pixel format, timecode, custom tags
+  - ### Pipeline & Process (Malli specs)
+    - **Pipeline** — `{:xt/id uuid, :src string, :processes [ProcessDefinition]}`
+    - **ProcessDefinition** — `{:xt/id uuid, :status :open|:processing|:completed, :type :media/proxy|:media/extract-audio|..., :deps [uuid], :opts map}`
+    - Processes form a DAG — each can declare dependencies on other processes. The scheduler queries for processes whose status is `:open` and whose deps are all `:completed`
+-
+- ## Components Detail
+  - ### config
+    - Reads EDN config from classpath via Aero
+    - Supports `#env`, `#include`, `#or` tagged literals
+    - Config path injected via `ds/local-ref` in donut.system
+    - Production config lives in `bases/grand-central/resources/grand-central/config.edn`
+    - Secrets loaded via `#include "grand-central/.secrets.edn"` (gitignored)
+  - ### core-utils
+    - Pure utility library (no system component)
+    - File hashing via imoHash (hash4j), XXH3-64
+
+    - URL parsing, Base64, conditional threading (`assoc-conditional`, `transform-conditional`)
+    - Dynamic function invocation by namespace path (`call-fn-in-ns`)
+
+  - ### database
+    - XTDB v2 node lifecycle (start/stop via donut.system)
+    - Schema definitions following Datomic-style attribute maps
+    - XTQL v2 queries (from, unify, unnest, rel, pull)
+    - **Dev storage:** Transaction log stored locally at `./tmp/mm/log` (configured via `:xtdb-config` in `config.edn`). Embedded node, no external DB server needed.
+    - TODO Configure production XTDB storage backend (Kafka, object store, or PostgreSQL)
+  - ### http-client
+    - Hato HTTP client with 10s timeout, follow-all redirects
+    - No dependencies — standalone donut.system component
+  - ### job-runner
+    - Goose (nilenso) backed by Redis
+    - Producer + N workers created at startup
+    - 3 queues: `default` (5 threads), `light-process` (5 threads), `heavy-process` (1 thread)
+    - Supports: async jobs, scheduled jobs, cron jobs
+    - Functions: `queue-job`, `create-cron-job`, `job-by-tx-id`, `clear-all-jobs`
+  - ### media-converter
+    - FFmpeg operations: `generate-proxy`, `extract-frames-from-video`, `get-video-duration`
+    - DAG-based pipeline model — processes have typed rules and dependency chains
+    - Multimethod dispatch (`process-rule`) by `:type` keyword
+    - Pipeline preparation: UUID assignment, Specter-based dep rewiring
+    - Uses Malli for pipeline validation
+  - ### media-ingest
+    - `get-comprehensive-file-info` — main entry, runs ffprobe + all detection
+    - Camera detection: Sony, RED, DJI, Canon, Panasonic, Blackmagic
+    - Picture profile detection: S-Log3, Canon Log, V-Log, LogC, REDLogFilm, etc.
+    - SD card batch analysis
+    - Remote NAS hashing via SSH + Docker
+  - ### user
+    - Scaffold/placeholder — `hello` function only
+
+-
+- ## Key Libraries
+  - | Library                       | Purpose                                         |
+    | ----------------------------- | ----------------------------------------------- |
+    | `party.donut/system`          | Component lifecycle management                  |
+    | `com.xtdb/xtdb-core`          | Bitemporal database                             |
+    | `com.nilenso/goose`           | Redis-backed job queue                          |
+    | `aero/aero`                   | EDN configuration with tagged literals          |
+    | `metosin/malli`               | Data-driven schema validation                   |
+    | `hato/hato`                   | HTTP client                                     |
+    | `ubergraph/ubergraph`         | Graph data structures                           |
+    | `com.rpl/specter`             | High-performance data navigation/transformation |
+    | `com.dynatrace.hash4j/hash4j` | File hashing (imoHash)                          |
+    | `cheshire/cheshire`           | JSON parsing                                    |
+    | `djblue/portal`               | REPL data inspector                             |
+    | `org.clojure/tools.namespace` | Code reloading                                  |
+-
+- ## Related Pages
+  - [[Setup]]
+  - [[Getting Started]]
+  - [[Job Runner]]
+  - [[Data model]]
+  - [[Task Runner]]
