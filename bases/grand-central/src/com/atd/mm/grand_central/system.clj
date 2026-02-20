@@ -4,6 +4,7 @@
    [com.atd.mm.config.interface :as config]
    [com.atd.mm.http-client.interface :as http-client]
    [com.atd.mm.job-runner.interface :as job-runner]
+   [com.atd.mm.grand-central.job-schedule.scheduled-jobs :as scheduled-jobs]
    [com.atd.mm.database.interface :as database]
    [donut.system :as ds]))
 
@@ -13,7 +14,8 @@
              :config-path "grand-central/config.edn"}
     :http-client {:client http-client/system-config}
     :job-runner {:job-runner job-runner/system-config}
-    :database {:node database/system-config}}})
+    :database {:node database/system-config}
+    :job-schedule {:scheduled-jobs scheduled-jobs/system-config}}})
 
 (defn register-system!
   [system]

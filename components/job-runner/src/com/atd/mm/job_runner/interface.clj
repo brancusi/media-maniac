@@ -1,42 +1,52 @@
 (ns com.atd.mm.job-runner.interface
   (:require
    [com.atd.mm.job-runner.core :as core]
+   [com.atd.mm.job-runner.cron :as cron]
+   [com.atd.mm.job-runner.worker :as worker]
+   [com.atd.mm.job-runner.producer :as producer]
+   [com.atd.mm.job-runner.consumer :as consumer]
    [donut.system :as ds]))
 
 (defn job-by-tx-id
-  [tx-id & opts]
+  [tx-id & {:as opts}]
   (core/job-by-tx-id tx-id opts))
 
 (defn create-producer
-  [& opts]
-  (apply core/create-producer opts))
+  [& {:keys [url pool-opts]
+      :as conn-opts}]
+  (producer/create-producer conn-opts))
+
+(defn create-consumer
+  [& {:keys [conn-opts scheduler-polling-interval-sec]
+      :as opts}]
+  (consumer/create-consumer opts))
 
 (defn create-worker
-  [& args]
-  (apply core/create-worker args))
+  [& {:as opts
+      :keys [scheduler-polling-interval-sec
+             conn-opts
+             worker-opts]}]
+  (worker/create-worker opts))
 
 (defn stop-worker
   [worker]
-  (core/stop-worker worker))
+  (worker/stop-worker worker))
 
 (defn queue-job
   [handler-function fn-args opts]
   (core/queue-job handler-function fn-args opts))
 
+(defn create-cron-job
+  [func & {:as opts}]
+  (cron/create-cron-job func opts))
+
 (defn clear-all-jobs
-  [& opts]
-  (apply core/clear-all-jobs opts))
+  [& {:as opts}]
+  (core/clear-all-jobs opts))
 
 (defn get-all-jobs
-  [& opts]
-  (apply core/get-all-jobs opts))
-
-(comment
-
-  (clear-all-jobs)
-
-  ;;Keep from folding
-  )
+  [& {:as opts}]
+  (core/get-all-jobs opts))
 
 (def system-config
   #::ds{:start (fn [{{:keys [job-runner]} ::ds/config}]
@@ -46,8 +56,12 @@
                    (println "Starting Redis related")
 
                    {:producer producer
-                    :workers (mapv (fn [worker-config]
-                                     (create-worker worker-config))
+                    :workers (mapv (fn [{:keys [scheduler-polling-interval-sec
+                                                worker-opts
+                                                conn-opts]}]
+                                     (create-worker {:conn-opts redis-config
+                                                     :scheduler-polling-interval-sec scheduler-polling-interval-sec
+                                                     :worker-opts worker-opts}))
                                    (:workers job-runner))}))
         :stop (fn [{::ds/keys [instance]}]
                 (println "Stopping Redis related")

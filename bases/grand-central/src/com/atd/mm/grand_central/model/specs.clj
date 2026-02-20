@@ -16,4 +16,4 @@
   [:map
    [:xt/id :uuid]
    [:src :string]
-   [:processes [:vector #'ProcessDefinition]]])
+   [:processes {:optional true} [:vector #'ProcessDefinition]]])

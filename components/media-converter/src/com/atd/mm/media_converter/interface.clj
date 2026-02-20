@@ -11,7 +11,3 @@
 (defn prepare-pipeline
   [pipeline]
   (pipeline/prepare-pipeline pipeline))
-
-(defn pipeline-valid?
-  [pipeline]
-  (pipeline/pipeline-valid? pipeline))

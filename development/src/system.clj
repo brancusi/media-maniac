@@ -48,11 +48,11 @@
 
 (defn start-dev
   []
-  ;; Start the target system
-  (target-system/-main)
+  ;; Start dev system
+  (start)
 
-  ;; Start donut system
-  (start))
+  ;; Start the target system
+  (target-system/-main))
 
 (defn get-system-portal
   []
