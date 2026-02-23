@@ -1,6 +1,6 @@
 (ns com.atd.mm.core-utils.interface-test
   (:require [clojure.test :as test :refer :all]
-            [com.sajb.core-utils.interface :as i]))
+            [com.atd.mm.core-utils.interface :as i]))
 
 (deftest assoc-when-tests
   (is (= (i/assoc-conditional

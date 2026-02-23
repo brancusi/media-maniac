@@ -12,11 +12,12 @@
   (core/get-comprehensive-file-info filepath))
 
 ;; ========== BASIC FUNCTIONS ==========
-(defn xxh3-64-file-local
-  "Returns XXH3-64 hex for a local file using xxhsum -H2.
+(defn xxh3-128-file-local
+  "Returns XXH3-128 hex for a local file using xxhsum -H128.
+   128-bit digest practically eliminates collision risk at scale.
    Requires: `brew install xxhash` on macOS."
   [path]
-  (core/xxh3-64-file-local path))
+  (core/xxh3-128-file-local path))
 
 (defn ffprobe-json
   "Run ffprobe and return parsed JSON (keyword keys).
@@ -45,8 +46,8 @@
   (core/analyze-sd-card sd-card-path))
 
 ;; ========== REMOTE OPERATIONS ==========
-(defn xxh3-64-remote
-  "SSH to NAS and compute XXH3-64 via Docker+xxhsum (-H2).
+(defn xxh3-128-remote
+  "SSH to NAS and compute XXH3-128 via Docker+xxhsum (-H128).
    Args:
      :identity -> SSH key on your Mac (e.g., \"/Users/atd/.ssh/id_ed25519_nas\")
      :user     -> NAS username (e.g., \"aramzadikian\")
@@ -55,7 +56,7 @@
      :file     -> filename inside that directory (e.g., \"C1557.MP4\")
    Returns the hex digest string, or throws ex-info on error."
   [opts]
-  (core/xxh3-64-remote opts))
+  (core/xxh3-128-remote opts))
 
 ;; ========== MAIN INGEST FUNCTION ==========
 (defn ingest-media

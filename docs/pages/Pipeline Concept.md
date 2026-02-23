@@ -1,0 +1,304 @@
+# Pipeline Concept
+
+A **pipeline** is the central abstraction in Media Maniac for processing a source media file through a series of steps. Each step is a **PipelineStep**. Steps form a **directed acyclic graph (DAG)** — some can run in parallel, others must wait for dependencies to finish first.
+
+Pipelines are managed by the unified `pipeline` component which handles templates, job instantiation, step CRUD, and dependency resolution.
+
+![Pipeline concept — template to job to step execution](../diagrams/pipeline-concept.png)
+
+---
+
+- ## Architecture Diagrams
+
+  The pipeline fits into the broader system architecture:
+
+  ![System architecture — end-to-end media processing](../diagrams/system-architecture.png)
+
+  Internal structure of the pipeline component:
+
+  ![Pipeline component internals](../diagrams/pipeline-internals.png)
+
+---
+
+- ## Data Model
+
+  Three XTDB v2 tables back the pipeline system:
+
+  | Table                 | Purpose                                                                                   |
+  | --------------------- | ----------------------------------------------------------------------------------------- |
+  | `:pipeline-templates` | Reusable blueprints — defines step definitions with string IDs and dependencies           |
+  | `:pipeline-jobs`      | One row per concrete execution — holds the UUID, source file path, and template reference |
+  | `:pipeline-steps`     | One row per processing step — type, options, status, UUID deps, back-reference to its job |
+
+- ### Malli Schemas
+
+  Defined in [`components/pipeline/src/com/atd/mm/pipeline/specs.clj`](../../components/pipeline/src/com/atd/mm/pipeline/specs.clj):
+
+  ```clojure
+  (def StepDefinition
+    [:map
+     [:id :string]
+     [:type [:enum :media/proxy :media/extract-audio
+             :media/extract-stills :media/transcribe :media/copy]]
+     [:opts {:optional true} :map]
+     [:deps {:optional true} [:vector :string]]])
+
+  (def PipelineTemplate
+    [:map
+     [:xt/id :uuid]
+     [:name :string]
+     [:steps [:vector StepDefinition]]])
+
+  (def PipelineStep
+    [:map
+     [:xt/id :uuid]
+     [:pipeline-job-id :uuid]
+     [:status [:enum :open :processing :completed]]
+     [:type [:enum :media/proxy :media/extract-audio
+             :media/extract-stills :media/transcribe :media/copy]]
+     [:opts {:optional true} :map]
+     [:deps {:optional true} [:vector :uuid]]])
+
+  (def PipelineJob
+    [:map
+     [:xt/id :uuid]
+     [:src :string]
+     [:template-id {:optional true} :uuid]
+     [:steps [:vector PipelineStep]]])
+  ```
+
+  **Key fields on a PipelineStep:**
+
+- **`:xt/id`** — UUID, primary key in XTDB
+- **`:type`** — what kind of media operation (`:media/proxy`, `:media/extract-stills`, etc.)
+- **`:status`** — lifecycle state: `:open` → `:processing` → `:completed`
+- **`:deps`** — a vector of UUIDs pointing to other steps that **must complete** before this one can run
+- **`:opts`** — a free-form map of options specific to the step type (resolution, encoding, frequency, etc.)
+- **`:pipeline-job-id`** — back-reference UUID linking this step to its parent pipeline job
+
+  ***
+
+- ## Templates: Reusable Pipeline Blueprints
+
+  A **PipelineTemplate** is a reusable definition. Step definitions use human-readable string IDs and string-based dependency references:
+
+  ```clojure
+  (require '[com.atd.mm.pipeline.interface :as pipeline])
+
+  (def standard-ingest-template
+    {:name "standard-ingest"
+     :steps [{:id "proxy-720"
+              :type :media/proxy
+              :opts {:size 720}}
+
+             {:id "extract-audio"
+              :type :media/extract-audio
+              :opts {:encoding "wav"}}
+
+             {:id "extract-stills"
+              :type :media/extract-stills
+              :opts {:frequency 10}
+              :deps ["proxy-720"]}
+
+             {:id "transcribe"
+              :type :media/transcribe
+              :opts {:model :whisper}
+              :deps ["proxy-720" "extract-audio"]}
+
+             {:id "copy"
+              :type :media/copy
+              :opts {:dest "/archive"}}]})
+
+  ;; Persist the template
+  (pipeline/create-template xtdb-node standard-ingest-template)
+  ```
+
+  Templates are stored in the `:pipeline-templates` table and can be reused across many source files.
+
+  ***
+
+- ## How a Pipeline Job Gets Created
+
+  There are three phases: **template (or define) → prepare → persist**.
+
+- ### Phase 1: Start from a template or raw definition
+
+  You can either reference a stored template or provide a raw map with step definitions:
+
+  ```clojure
+  ;; From a template:
+  (pipeline/create-job-from-template xtdb-node template-id "/footage/A001_C003.MP4")
+
+  ;; Or from a raw definition:
+  (def raw-job
+    {:src "/footage/A001_C003.MP4"
+     :steps [{:id "proxy-720"
+              :type :media/proxy
+              :opts {:size 720}
+              :deps []}
+             {:id "extract-stills"
+              :type :media/extract-stills
+              :opts {:frequency 10}
+              :deps ["proxy-720"]}]})
+  ```
+
+- ### Phase 2: Prepare the job (`prepare-job`)
+
+  The `prepare-job` function in [`components/pipeline/src/com/atd/mm/pipeline/prepare.clj`](../../components/pipeline/src/com/atd/mm/pipeline/prepare.clj) transforms the human-readable definition into a database-ready structure:
+
+  ```clojure
+  (pipeline/prepare-job raw-job)
+  ```
+
+  **What `prepare-job` does:**
+  1. **Generates a pipeline job UUID** — `(random-uuid)` for the job's `:xt/id`
+  2. **Replaces string IDs with UUIDs** — each step's `:id` like `"proxy-720"` becomes a real `:xt/id` UUID
+  3. **Updates dependency references** — any `:deps` entries that pointed to old string IDs now point to the corresponding new UUID. This uses [Specter](https://github.com/redplanetlabs/specter) for deep structural transforms
+  4. **Stamps every step with `:status :open`** — all steps start in the open state
+  5. **Stamps every step with `:pipeline-job-id`** — back-reference to the parent job UUID
+
+  **Example output after preparation:**
+
+  ```clojure
+  {:xt/id #uuid "03e1545e-f6d0-4b02-a1f2-b466f87a9394"
+   :src "/footage/A001_C003.MP4"
+   :steps
+   [{:xt/id #uuid "a1b2c3d4-..."
+     :type :media/proxy
+     :opts {:size 720}
+     :status :open
+     :pipeline-job-id #uuid "03e1545e-..."}
+
+    {:xt/id #uuid "c9d0e1f2-..."
+     :type :media/extract-stills
+     :opts {:frequency 10}
+     :deps [#uuid "a1b2c3d4-..."]
+     :status :open
+     :pipeline-job-id #uuid "03e1545e-..."}]}
+  ```
+
+- ### Phase 3: Persist to XTDB (`create-job`)
+
+  The `create-job` function in [`components/pipeline/src/com/atd/mm/pipeline/job.clj`](../../components/pipeline/src/com/atd/mm/pipeline/job.clj) validates and stores the job.
+
+  ```clojure
+  (pipeline/create-job xtdb-node prepared-job)
+  ```
+
+  **This splits the data across two tables in a single atomic transaction:**
+
+  ```clojure
+  ;; Operation 1: Insert all steps into :pipeline-steps
+  (into [:put-docs :pipeline-steps] steps-tx-data)
+
+  ;; Operation 2: Insert the job record into :pipeline-jobs
+  [:put-docs :pipeline-jobs job-tx-data]
+  ```
+
+  Both operations execute atomically. Either all steps and the job row are committed, or none are.
+
+  ***
+
+- ## Dependency Resolution: How Scheduling Works
+
+  Once a job is persisted, the scheduler needs to determine which steps are **ready to run**. A step is ready when:
+  1. Its `:status` is `:open`
+  2. It has **no** `:deps`, OR **all** steps in its `:deps` vector have `:status :completed`
+
+  This logic lives in [`components/pipeline/src/com/atd/mm/pipeline/step.clj`](../../components/pipeline/src/com/atd/mm/pipeline/step.clj):
+
+- ### The query: `get-ready-steps`
+
+  ```clojure
+  (pipeline/get-ready-steps xtdb-node)
+  ```
+
+  **Step by step:**
+  1. Query all steps where `:status` is `:open`
+  2. For each open step, pull the actual status of each dependency using XTQL's `pull*`
+  3. Filter: only keep steps where every dep has `:status :completed`
+
+- ### Example: Dependency resolution over time
+
+  Given the 5-step pipeline above, here's how scheduling unfolds:
+
+  **Cycle 1** — Initial state, all steps are `:open`:
+
+  | Step           | Deps                       | Deps Status    | Ready?  |
+  | -------------- | -------------------------- | -------------- | ------- |
+  | proxy-720      | none                       | —              | **YES** |
+  | extract-audio  | none                       | —              | **YES** |
+  | copy           | none                       | —              | **YES** |
+  | extract-stills | [proxy-720]                | [:open]        | no      |
+  | transcribe     | [proxy-720, extract-audio] | [:open, :open] | no      |
+
+  The scheduler picks up `proxy-720`, `extract-audio`, and `copy`. They get queued as Goose jobs.
+
+  **Cycle 2** — After proxy-720 and extract-audio complete:
+
+  | Step           | Deps                       | Deps Status              | Ready?  |
+  | -------------- | -------------------------- | ------------------------ | ------- |
+  | extract-stills | [proxy-720]                | [:completed]             | **YES** |
+  | transcribe     | [proxy-720, extract-audio] | [:completed, :completed] | **YES** |
+
+  Both blocked steps are now eligible. The scheduler queues them.
+
+  **Cycle 3** — All steps completed. Pipeline job is done.
+
+- ### Updating step status
+
+  After a worker finishes executing a step, its status is updated via `patch-docs`:
+
+  ```clojure
+  (pipeline/update-step xtdb-node step-id {:status :completed})
+  ```
+
+  ***
+
+- ## Full End-to-End Example
+
+  ```clojure
+  (require '[com.atd.mm.pipeline.interface :as pipeline])
+
+  ;; 1. Create a template (one-time)
+  (def tpl (pipeline/create-template xtdb-node
+             {:name "standard-ingest"
+              :steps [{:id "proxy-720"
+                       :type :media/proxy
+                       :opts {:size 720}}
+                      {:id "extract-stills"
+                       :type :media/extract-stills
+                       :opts {:frequency 10}
+                       :deps ["proxy-720"]}]}))
+
+  ;; 2. Instantiate a job from the template
+  (pipeline/create-job-from-template xtdb-node
+    (:xt/id tpl) "/footage/A001_C003.MP4")
+
+  ;; 3. Query what's ready to run
+  (pipeline/get-ready-steps xtdb-node)
+  ;; => [{:xt/id #uuid "a1b2c3d4-..." :type :media/proxy ...}]
+  ;;    (only proxy-720 — extract-stills is blocked)
+
+  ;; 4. After proxy-720 completes, mark it done
+  (pipeline/update-step xtdb-node #uuid "a1b2c3d4-..." {:status :completed})
+
+  ;; 5. Query again — extract-stills is now unblocked
+  (pipeline/get-ready-steps xtdb-node)
+  ;; => [{:xt/id #uuid "c9d0e1f2-..." :type :media/extract-stills ...}]
+  ```
+
+  ***
+
+- ## Code Locations
+
+  | Concern                     | File                                                                                        | Key functions                                                       |
+  | --------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+  | Malli schemas               | [`pipeline/specs.clj`](../../components/pipeline/src/com/atd/mm/pipeline/specs.clj)         | `StepDefinition`, `PipelineTemplate`, `PipelineStep`, `PipelineJob` |
+  | Template CRUD               | [`pipeline/template.clj`](../../components/pipeline/src/com/atd/mm/pipeline/template.clj)   | `create-template`, `get-template`, `delete-template`                |
+  | Job preparation             | [`pipeline/prepare.clj`](../../components/pipeline/src/com/atd/mm/pipeline/prepare.clj)     | `prepare-job`, `create-job-from-template`                           |
+  | Job CRUD                    | [`pipeline/job.clj`](../../components/pipeline/src/com/atd/mm/pipeline/job.clj)             | `create-job`, `get-job`, `get-all-jobs`, `delete-job`               |
+  | Step CRUD & dep resolution  | [`pipeline/step.clj`](../../components/pipeline/src/com/atd/mm/pipeline/step.clj)           | `get-ready-steps`, `update-step`, `step-completed?`                 |
+  | Pipeline interface          | [`pipeline/interface.clj`](../../components/pipeline/src/com/atd/mm/pipeline/interface.clj) | Unified public API (all above delegated)                            |
+  | Pipeline concept diagram    | [`diagram/pipeline_concept.clj`](../../development/src/diagram/pipeline_concept.clj)        | `pipeline-concept-graph`                                            |
+  | System architecture diagram | [`diagram/fiddle.clj`](../../development/src/diagram/fiddle.clj)                            | `system-architecture`, `pipeline-internals`, `donut-system-graph`   |

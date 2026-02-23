@@ -1,5 +1,3 @@
-#/etc/rabbitmq/enabled_plugins = location of file in image
-#
 services:
   
   redis:

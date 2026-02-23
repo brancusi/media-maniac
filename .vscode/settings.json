@@ -7,7 +7,7 @@
       "autoSelectForJackIn": true,
       "autoSelectForConnect": true,
       "projectRootPath": ["."],
-      "afterCLJReplJackInCode": "(do ((requiring-resolve 'system/start-dev)))",
+      "afterPrimaryReplConnectedCode": "(do ((requiring-resolve 'system/start-dev)))",
       "menuSelections": {
         "cljAliases": ["dev", "xtdb", "test", "+default"]
       }
@@ -15,5 +15,26 @@
   ],
 
   "calva.autoConnectRepl": true,
-  "calva.autoOpenJackInTerminal": true
+  "calva.autoOpenJackInTerminal": true,
+
+  "calva.customREPLCommandSnippets": [
+    {
+      "name": "Full Project Refresh",
+      "repl": "clj",
+      "key": "f",
+      "snippet": "(do (require 'system) (system/full-refresh))"
+    },
+    {
+      "name": "Restart Systems (no ns reload)",
+      "repl": "clj",
+      "key": "r",
+      "snippet": "(do (require 'system) ((requiring-resolve 'com.atd.mm.grand-central.core/shutdown!)) (system/stop) (system/start) ((requiring-resolve 'com.atd.mm.grand-central.core/-main)))"
+    },
+    {
+      "name": "Nuke XTDB & Restart",
+      "repl": "clj",
+      "key": "n",
+      "snippet": "(do (require 'system) (system/nuke-xtdb!))"
+    }
+  ]
 }

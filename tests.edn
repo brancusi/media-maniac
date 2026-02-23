@@ -1,0 +1,23 @@
+#kaocha/v1
+ {:tests [{:id           :unit
+           :test-paths   ["bases/grand-central/test"
+                          "components/config/test"
+                          "components/core-utils/test"
+                          "components/database/test"
+                          "components/http-client/test"
+                          "components/job-runner/test"
+                          "components/media-ingest/test"
+                          "components/media-processor/test"
+                          "components/pipeline/test"
+                          "components/user/test"]
+           :source-paths ["bases/grand-central/src"
+                          "components/config/src"
+                          "components/core-utils/src"
+                          "components/database/src"
+                          "components/http-client/src"
+                          "components/job-runner/src"
+                          "components/media-ingest/src"
+                          "components/media-processor/src"
+                          "components/pipeline/src"
+                          "components/user/src"
+                          "development/src"]}]}

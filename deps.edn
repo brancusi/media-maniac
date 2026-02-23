@@ -3,6 +3,10 @@
                   :extra-deps {djblue/portal {:mvn/version "0.62.1"}
                                party.donut/system {:mvn/version "1.0.257"}
 
+                               com.phronemophobic/clj-graphviz {:mvn/version "0.6.4"}
+
+                               com.phronemophobic.cljonda/graphviz-darwin-aarch64 {:mvn/version "2.50.0-0.9.5"}
+
                                org.clojure/tools.deps {:mvn/version "0.27.1564"}
 
 
@@ -14,7 +18,8 @@
 
                                poly/user {:local/root "components/user"}
                                poly/media-ingest {:local/root "components/media-ingest"}
-                               poly/media-converter {:local/root "components/media-converter"}
+                               poly/media-processor {:local/root "components/media-processor"}
+                               poly/pipeline {:local/root "components/pipeline"}
                                poly/job-runner {:local/root "components/job-runner"}
 
                                poly/core-utils {:local/root "components/core-utils"}
@@ -31,7 +36,8 @@
                                  ;;      Components
                                  "components/user/test"
                                  "components/media-ingest/test"
-                                 "components/media-converter/test"
+                                 "components/media-processor/test"
+                                 "components/pipeline/test"
                                  "components/job-runner/test"
 
                                  "components/core-utils/test"
@@ -40,12 +46,26 @@
                                  "components/http-client/test"
 
                                  ;;      
-                                 ]}
+                                 ]
+                   :extra-deps {polylith-kaocha/kaocha-wrapper
+                                {:git/url   "https://github.com/imrekoszo/polylith-kaocha"
+                                 :git/tag   "v0.8.6"
+                                 :git/sha   "7282409"
+                                 :deps/root "projects/kaocha-wrapper"}}}
 
 
             :xtdb {:jvm-opts ["--add-opens=java.base/java.nio=ALL-UNNAMED"
                               "-Dio.netty.tryReflectionSetAccessible=true"
                               "--enable-native-access=ALL-UNNAMED"]}
+            :kaocha {:extra-deps {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
+                     :main-opts  ["-m" "kaocha.runner"]}
+
             :poly {:main-opts ["-m" "polylith.clj.core.poly-cli.core"]
-                   :extra-deps {polylith/clj-poly {:mvn/version "0.3.31"}}}}}
+                   :extra-deps {polylith/clj-poly {:mvn/version "0.3.32"}
+
+                                polylith-kaocha/test-runner
+                                {:git/url   "https://github.com/imrekoszo/polylith-kaocha"
+                                 :git/tag   "v0.8.6"
+                                 :git/sha   "7282409"
+                                 :deps/root "projects/test-runner"}}}}}
 

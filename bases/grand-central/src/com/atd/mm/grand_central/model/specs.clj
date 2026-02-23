@@ -1,19 +1,12 @@
-(ns com.atd.mm.grand-central.model.specs)
+(ns com.atd.mm.grand-central.model.specs
+  "Re-exports schemas from pipeline component for backward compatibility.
+   Prefer requiring com.atd.mm.pipeline.interface directly."
+  (:require
+   [com.atd.mm.pipeline.interface :as pipeline]))
 
-(def ProcessDefinition
-  [:map
-   [:xt/id :uuid]
-   [:status [:enum :open :processing :completed]]
-   [:opts {:optional true} :map]
-   [:type [:enum :media/proxy
-           :media/extract-audio
-           :media/extract-stills
-           :media/transcribe
-           :media/copy]]
-   [:deps {:optional true} [:vector :uuid]]])
+;; --- Legacy aliases (prefer direct component requires) ---
 
-(def Pipeline
-  [:map
-   [:xt/id :uuid]
-   [:src :string]
-   [:processes {:optional true} [:vector #'ProcessDefinition]]])
+(def StepDefinition pipeline/StepDefinition)
+(def PipelineTemplate pipeline/PipelineTemplate)
+(def PipelineStep pipeline/PipelineStep)
+(def PipelineJob pipeline/PipelineJob)

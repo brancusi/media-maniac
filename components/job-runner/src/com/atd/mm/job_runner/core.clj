@@ -7,12 +7,13 @@
    [goose.worker :as w]))
 
 (defn queue-job
-  [handler-function fn-args {:keys [producer queue]}]
+  [handler-function fn-args {:keys [producer queue retry-opts]}]
   (let [producer (or producer (create-producer))
         queue (or queue "default")
-        client-opts (assoc c/default-opts
-                           :broker producer
-                           :queue queue)]
+        client-opts (cond-> (assoc c/default-opts
+                                   :broker producer
+                                   :queue queue)
+                      retry-opts (assoc :retry-opts retry-opts))]
 
     (c/perform-async client-opts handler-function fn-args)))
 
@@ -47,15 +48,23 @@
                   (first (seq queued-results)))]
     match))
 
+(defn hey-son
+  [& args]
+  (tap> {:args args}))
+
 (comment
 
   (enqueued-jobs/list-all-queues (create-producer))
+  ;;=> ()
 
   (get-all-jobs)
+  ;;=> ()
 
-  (queue-job 'my-fn
+
+  (queue-job `hey-son
              {:args {:id "hi"}}
              {:queue "default"})
+
 
   (let [uuid "id-234567"
         queue "heavy-process1"
@@ -82,6 +91,7 @@
   (def redis-producer (create-producer))
 
   (enqueued-jobs/list-all-queues redis-producer)
+
 
   (enqueued-jobs/size redis-producer "heavy-process")
 

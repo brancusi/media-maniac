@@ -41,7 +41,7 @@
    {:db/ident       :hash/algorithm
     :db/valueType   :db.type/keyword
     :db/cardinality :db.cardinality/one
-    :db/doc         "Hash algorithm used: :xxh3-64, :sha256, :md5"}
+    :db/doc         "Hash algorithm used: :xxh3-128, :sha256, :md5"}
 
    {:db/ident       :hash/value
     :db/valueType   :db.type/string

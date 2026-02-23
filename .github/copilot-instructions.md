@@ -1,348 +1,161 @@
-# Media Maniac — Copilot Instructions
+# Media Maniac — Coding Agent Instructions
 
-## Project Overview
+## Project Summary
 
-Media Maniac is a Clojure application for managing a large media archive. It processes raw footage through automated pipelines: ingesting from SD cards, generating proxies, extracting frames for visual search, transcribing audio, and creating lossless subclips for remote delivery.
+Clojure 1.12 monorepo (Polylith architecture) for managing a media archive. Processes raw footage through pipelines: ingest from SD cards, generate proxies (FFmpeg), extract frames, transcribe audio, and create subclips. Uses XTDB v2 (embedded), Goose job queue (Redis), Donut System lifecycle. No CI/CD pipelines — validation is manual via `clj -M:poly check` and `clj -M:poly test :dev`.
 
-**Top namespace:** `com.atd.mm`
+**Top namespace:** `com.atd.mm` | **Runtime:** Java 21+, Clojure CLI 1.12.x | **External tools:** FFmpeg, xxhash, Docker
 
-## Architecture: Polylith
+## Build & Validation Commands
 
-This project uses [Polylith](https://polylith.gitbook.io/polylith) as its architectural framework. All code lives in a single monorepo with strict separation between components, bases, and projects.
+Always run these commands from the repository root.
 
-### Workspace Structure
-
+### Validate workspace integrity (always run after structural changes)
+```bash
+clj -M:poly check
 ```
-bases/          → Deployable entry points (currently: grand-central)
-components/     → Reusable building blocks with interface/implementation separation
-projects/       → Deployable artifacts (build configs)
-development/    → REPL-driven dev environment
+Exit 0 = success (no output). Catches missing interface functions, broken deps, namespace violations.
+
+### Run all tests (always run after code changes)
+```bash
+clj -M:poly test :dev
 ```
+Runs all test suites via Kaocha (polylith-kaocha integration). SLF4J warnings in output are harmless — ignore them. Tests do NOT require Docker/Redis to be running.
 
-### Creating a New Component
+### Run tests in watch mode (re-runs on file change)
+```bash
+clojure -M:dev:test:kaocha --watch
+```
+Stays running and re-runs affected tests when source or test files change. Uses standalone Kaocha with `tests.edn` config. Press Ctrl-C to stop.
 
-Use the Polylith CLI:
+### Lint (clj-kondo)
+```bash
+clj-kondo --lint bases components development
+```
+Config at `.clj-kondo/config.edn`. Specter macros are configured as lint-as rules.
 
+### Start infrastructure (required only for REPL/runtime, not for tests)
+```bash
+docker compose -f bases/grand-central/docker-compose.yaml up -d
+```
+Starts Redis (:6379) and RedisInsight (:5540).
+
+### Create a new Polylith component
 ```bash
 clj -M:poly create component name:<component-name>
 ```
+Then register it — see "Adding a Component" below.
 
-This creates:
+## Project Layout
 
 ```
-components/<component-name>/
-├── deps.edn
-├── resources/<component-name>/
-├── src/com/atd/mm/<component_name>/
-│   └── interface.clj      ← Public API (required)
-└── test/com/atd/mm/<component_name>/
-    └── interface_test.clj
+deps.edn                        ← Root: aliases :dev, :test, :xtdb, :kaocha, :poly
+tests.edn                       ← Kaocha config (standalone watch mode)
+workspace.edn                   ← Polylith config (top-namespace: com.atd.mm)
+bases/grand-central/             ← Single deployable base (entry point, system wiring)
+  src/com/atd/mm/grand_central/
+    system.clj                   ← Donut System assembly (wires all components)
+    resolver.clj                 ← Typed accessors for running system instances
+    core.clj                     ← init!, shutdown!, -main
+    model/specs.clj              ← Legacy schema re-exports
+  resources/grand-central/
+    config.edn                   ← Aero config (reads .secrets.edn via #include)
+  docker-compose.yaml            ← Redis + RedisInsight
+components/                      ← 9 components, each with interface.clj
+  config/                        ← Aero config reader (aero 1.1.6)
+  core-utils/                    ← Shared utilities (impl/ subdirectory pattern)
+  database/                      ← XTDB v2 node + schema (xtdb 2.x-SNAPSHOT)
+  http-client/                   ← Hato HTTP client
+  job-runner/                    ← Goose job queue (goose 0.6.0)
+  media-ingest/                  ← SD card analysis, ffprobe, camera detection
+  media-processor/               ← FFmpeg processing, multimethod dispatch
+    processors/core.clj          ← defmulti execute-process (dispatch on :processor)
+    processors/{proxy,extract_stills,copy,extract_audio,transcribe}.clj
+  pipeline/                      ← Pipeline templates, jobs, steps, Malli specs
+  user/                          ← Placeholder/scaffold
+development/src/
+  system.clj                     ← Dev system (Portal + start/stop/restart helpers)
+  user.clj                       ← REPL entry (requires system, debug, logging)
+.clj-kondo/config.edn           ← Linting config (Specter macros)
+.vscode/settings.json            ← Calva jack-in config (aliases: dev, xtdb, test)
 ```
 
-### The Interface Pattern
+## Architecture Rules (MUST follow)
 
-Every component MUST expose its API through `interface.clj`. Implementation goes in `core.clj` or `impl/` subdirectories. The interface delegates to implementation:
+### Polylith Interface Pattern
+- Every component exposes its API through `<component>/interface.clj` ONLY
+- Other components/bases may NEVER require `core.clj` or internal namespaces directly
+- All public functions must appear in `interface.clj` as pass-throughs to implementation
+- Implementation goes in `core.clj` or `impl/*.clj` (private to the component)
 
+### Namespace Convention
+- Source: `com.atd.mm.<component-name>.<file>` (e.g., `com.atd.mm.pipeline.job`)
+- Interface: `com.atd.mm.<component-name>.interface`
+- Tests: `com.atd.mm.<component-name>.interface-test`
+- File paths use underscores for hyphens: `com.atd.mm.core-utils` → `core_utils/`
+
+### Adding a Component (complete checklist)
+1. `clj -M:poly create component name:<name>`
+2. Root `deps.edn` → `:dev` → `:extra-deps`: add `poly/<name> {:local/root "components/<name>"}`
+3. Root `deps.edn` → `:test` → `:extra-paths`: add `"components/<name>/test"`
+4. If stateful: add `system-config` to impl, re-export via interface, wire into `bases/grand-central/src/com/atd/mm/grand_central/system.clj`, add accessor in `resolver.clj`, add config key in `config.edn`
+5. Add source path to `development/src/system.clj` → `tn-repl/set-refresh-dirs`
+6. Run `clj -M:poly check` to verify
+
+### Adding a Media Processor
+1. Create `components/media-processor/src/com/atd/mm/media_processor/processors/<name>.clj`
+2. Implement `(defmethod core/execute-process :media/<type> ...)`
+3. Require the new file in `processors/interface.clj`
+4. Add the type keyword to `pipeline/specs.clj` processor enum
+5. Run `clj -M:poly test :dev`
+
+## Donut System Lifecycle
+
+Components with state (DB connections, clients) use Donut System:
 ```clojure
-;; components/my-feature/src/com/atd/mm/my_feature/interface.clj
-(ns com.atd.mm.my-feature.interface
-  (:require [com.atd.mm.my-feature.core :as impl]))
-
-;; Public API — other components/bases call ONLY these functions
-(defn do-something [arg]
-  (impl/do-something arg))
-
-(def system-config impl/system-config)  ;; If this component has lifecycle
-```
-
-```clojure
-;; components/my-feature/src/com/atd/mm/my_feature/core.clj
-(ns com.atd.mm.my-feature.core
-  (:require [party.donut.system :as ds]))
-
-(defn do-something [arg]
-  ;; actual implementation here
-  )
-```
-
-**Rules:**
-- Other components and bases may ONLY require `<component>.interface` — never `<component>.core` or internal namespaces
-- All public functions must be declared in `interface.clj`
-- Implementation namespaces (`core.clj`, `impl/*.clj`) are private to the component
-- If a component has many implementation files, use an `impl/` subdirectory (see `core-utils` for example)
-
-### For Deeper Implementation Hierarchies
-
-When a component has multiple implementation concerns (like `core-utils`):
-
-```
-components/core-utils/src/com/atd/mm/core_utils/
-├── interface.clj           ← Single public API
-└── impl/
-    ├── file.clj            ← File operations
-    ├── string.clj          ← String operations
-    ├── url.clj             ← URL parsing
-    └── ...
-```
-
-The interface requires all impl namespaces and re-exports selected functions:
-
-```clojure
-(ns com.atd.mm.core-utils.interface
-  (:require [com.atd.mm.core-utils.impl.file :as file]
-            [com.atd.mm.core-utils.impl.string :as string]))
-
-(defn hash-file [path] (file/hash-file path))
-(defn force-int [v] (string/force-int v))
-```
-
-### Registering a Component in the Workspace
-
-After creating a component, add it to the root `deps.edn` under the `:dev` alias:
-
-```clojure
-;; deps.edn → :aliases → :dev → :extra-deps
-poly/my-feature {:local/root "components/my-feature"}
-```
-
-And add its test path:
-
-```clojure
-;; deps.edn → :aliases → :test → :extra-paths
-"components/my-feature/test"
-```
-
-### Component Dependencies
-
-Declare inter-component dependencies in the component's own `deps.edn`:
-
-```clojure
-;; components/my-feature/deps.edn
-{:paths ["src" "resources"]
- :deps {;; External deps only
-        some.lib/library {:mvn/version "1.0.0"}}
- :aliases {:test {:extra-paths ["test"]
-                  :extra-deps {}}}}
-```
-
-At runtime, components reference each other through interface namespaces:
-
-```clojure
-(require '[com.atd.mm.config.interface :as config])
-(require '[com.atd.mm.core-utils.interface :as utils])
-```
-
-## Component Lifecycle: Donut System
-
-[Donut System](https://github.com/donut-engineering/system) manages component start/stop lifecycle.
-
-### Defining a System Component
-
-Components that need lifecycle (connections, stateful resources) expose a `system-config` var:
-
-```clojure
-(ns com.atd.mm.my-feature.core
-  (:require [party.donut.system :as ds]))
-
 (def system-config
-  #::ds{:start  (fn [{{:keys [some-config]} ::ds/config}]
-                  ;; Return the running instance
-                  (create-thing some-config))
-        :stop   (fn [{::ds/keys [instance]}]
-                  ;; Clean up
-                  (.close instance))
-        :config {:some-config (ds/ref [:config :env :my-feature])}})
+  #::ds{:start  (fn [{{:keys [setting]} ::ds/config}] (create-thing setting))
+        :stop   (fn [{::ds/keys [instance]}] (.close instance))
+        :config {:setting (ds/ref [:config :env :my-key])}})
+```
+- `ds/ref [:group :component & path]` — cross-component reference
+- `ds/local-ref [:key]` — sibling reference within same group
+- System graph: `:config` → `:http-client` → `:database` → `:job-runner` → `:job-schedule`
+
+## Key Dependencies & Patterns
+
+| Library | Purpose | Key namespace |
+|---------|---------|---------------|
+| XTDB v2 | Database (XTQL queries, embedded) | `xtdb.api` |
+| Goose | Job queue (Redis broker) | `goose.client`, `goose.worker` |
+| Malli | Data validation schemas | `malli.core` |
+| Aero | Config EDN reader | `aero.core` |
+| Specter | Data navigation/transformation | `com.rpl.specter` |
+| Hato | HTTP client | `hato.client` |
+| Donut System | Component lifecycle | `donut.system` / `party.donut.system` |
+
+**XTDB v2 requires JVM flags** (provided by `:xtdb` alias):
+```
+--add-opens=java.base/java.nio=ALL-UNNAMED
+-Dio.netty.tryReflectionSetAccessible=true
+--enable-native-access=ALL-UNNAMED
 ```
 
-**Key patterns:**
-- `::ds/start` receives a map containing `::ds/config` (resolved config values)
-- `::ds/stop` receives a map containing `::ds/instance` (whatever start returned)
-- `ds/ref [:config :env :key]` — reference another component's output in the system graph. Path is `[group-key component-key & path]`
-- `ds/local-ref [:key]` — reference a sibling key in the same component group
+## Known Issues & Workarounds
 
-### Wiring Components into the System
+- **SLF4J warnings** during test runs ("No SLF4J providers were found") are harmless — ignore them
+- **Secrets file must exist**: `bases/grand-central/resources/grand-central/.secrets.edn` — create with `{}` if missing. It is gitignored but required by Aero `#include`
+- **`clj -M:poly test :all`** without a stable git tag returns "No tests to run" — always use `clj -M:poly test :dev` instead
+- **`clj -M:poly info`** uses ANSI colors that may not render in all terminals — add `:no-colors` flag if needed
+- **No GitHub Actions / CI** — there are no workflow files. Validate locally with `clj -M:poly check` then `clj -M:poly test :dev`
 
-The base's `system.clj` assembles all components:
+## Code Style
 
-```clojure
-;; bases/grand-central/src/com/atd/mm/grand_central/system.clj
-(ns com.atd.mm.grand-central.system
-  (:require [party.donut.system :as ds]
-            [com.atd.mm.config.interface :as config]
-            [com.atd.mm.database.interface :as database]
-            [com.atd.mm.my-feature.interface :as my-feature]))
+- Small, composable functions; prefer Clojure idioms over Java interop
+- Namespaced keywords for domain data: `:media/id`, `:pipeline/status`, `:transfer/type`
+- Data validation via Malli schemas (defined in `specs.clj` files)
+- FFmpeg/FFprobe via `clojure.java.shell/sh`
+- Debugging via `tap>` (flows to Portal in dev)
+- Tests use `clojure.test` with Kaocha runner (via polylith-kaocha for `poly test`, standalone for watch mode)
 
-(def system-config
-  {::ds/defs
-   {:config      {:env config/system-config
-                   :config-path "grand-central/config.edn"}
-
-    :database    {:node database/system-config}
-
-    :my-feature  {:instance my-feature/system-config}}})
-```
-
-**System map structure:**
-```
-{::ds/defs
- {<group-key>  {<component-key>  <component-config>
-                <sibling-key>    <static-value>}}}
-```
-
-- Groups organize related components (`:config`, `:database`, `:job-runner`, etc.)
-- Each group can have multiple keys — some are donut.system components (with `::ds/start`), others are plain values (like `:config-path`)
-- References resolve across the graph: `(ds/ref [:config :env])` points to group `:config`, key `:env`, getting whatever its `::ds/start` returned
-
-### Starting/Stopping the System
-
-```clojure
-;; Start
-(def running-system (ds/signal system-config ::ds/start))
-
-;; Stop
-(ds/signal running-system ::ds/stop)
-```
-
-In dev, use the helpers in `development/src/system.clj`:
-
-```clojure
-(require '[system :as sys])
-(sys/start-dev)              ;; Start Portal + grand-central system
-(sys/refresh-and-restart)    ;; Reload code + restart
-```
-
-### Accessing Running Instances (Resolver Pattern)
-
-The `grand-central.resolver` namespace provides typed accessors for the running system:
-
-```clojure
-(ns com.atd.mm.grand-central.resolver)
-
-(defonce rs nil)  ;; Holds the running system
-
-(defn get-xtdb-node []
-  (get-in (ds/instances rs) [:database :node]))
-
-(defn get-config []
-  (get-in (ds/instances rs) [:config :env]))
-
-(defn get-job-runner []
-  (get-in (ds/instances rs) [:job-runner :job-runner]))
-```
-
-When adding a new system component, add a corresponding accessor in resolver.
-
-## Processing Pipeline Pattern
-
-Media processing uses a multimethod-based dispatch system.
-
-### Defining a New Processor
-
-1. Create a file in `components/media-converter/src/com/atd/mm/media_converter/processors/`:
-
-```clojure
-(ns com.atd.mm.media-converter.processors.my-processor
-  (:require [com.atd.mm.media-converter.processors.core :as core]))
-
-(defmethod core/process-rule :media/my-process
-  [{:keys [opts]}]
-  ;; Process the media file according to opts
-  ;; Return result map
-  )
-```
-
-2. Require the new processor in `processors/interface.clj` to register the multimethod:
-
-```clojure
-(ns com.atd.mm.media-converter.processors.interface
-  (:require [com.atd.mm.media-converter.processors.proxy]
-            [com.atd.mm.media-converter.processors.my-processor]  ;; Add this
-            ...))
-```
-
-3. Add the new type to the Malli spec in `grand-central/model/specs.clj`:
-
-```clojure
-[:type [:enum :media/proxy :media/extract-audio :media/extract-stills
-        :media/transcribe :media/copy :media/my-process]]  ;; Add here
-```
-
-## Configuration
-
-Config uses [Aero](https://github.com/juxt/aero) to read EDN with tagged literals.
-
-Main config: `bases/grand-central/resources/grand-central/config.edn`
-
-```clojure
-{:env #or [#env ENV :dev]
- :local #include "grand-central/.secrets.edn"
- :xtdb-config {:log [:local {:path "./tmp/mm/log"}]}
- :job-runner {:redis {:url "redis://localhost:6379"
-                      :pool-opts {:max-total-per-key 10
-                                  :max-idle-per-key  10
-                                  :min-idle-per-key  2}}
-              :workers [...]}}
-```
-
-When adding a new config section:
-1. Add the key to `config.edn`
-2. Reference it in the system component: `(ds/ref [:config :env :my-new-key])`
-
-## Database: XTDB v2
-
-XTDB v2 uses XTQL query syntax. Key patterns:
-
-```clojure
-;; Basic query
-(xt/q node '(from :table [*]))
-
-;; Parametric query
-(xt/q node '(from :table [{:xt/id $id} *])
-      {:args {:id some-uuid}})
-
-;; With pull (nested)
-(xt/q node '(-> (from :pipelines [{:xt/id $id} *])
-                (return {:processes (pull* (from :processes [{:xt/id $process-id} *]))})))
-```
-
-Schema is defined as attribute maps in `components/database/src/com/atd/mm/database/schema.clj`.
-
-## Job Queue: Goose
-
-Background jobs use Goose with Redis broker.
-
-### Enqueueing a Job
-
-```clojure
-(require '[com.atd.mm.job-runner.interface :as jobs])
-
-;; Queue a job — handler-fn must be a fully qualified symbol
-(jobs/queue-job 'com.atd.mm.media-converter.interface/process-video
-                [{:src "/path/to/file.mov" :rules [...]}]
-                {:queue "heavy-process"
-                 :producer (get-producer)})
-```
-
-### Worker Queues
-
-| Queue | Threads | Use For |
-|-------|---------|---------|
-| `default` | 5 | General tasks |
-| `light-process` | 5 | Quick operations (metadata, hashing) |
-| `heavy-process` | 1 | FFmpeg transcoding, large file ops |
-
-## Code Style & Conventions
-
-- Write small, composable functions
-- Prefer Clojure idioms over Java interop unless necessary
-- Use `tap>` for debugging output (flows to Portal)
-- Use namespaced keywords for domain data (`:media/id`, `:transfer/status`)
-- All data validation via Malli schemas
-- FFmpeg/FFprobe invocations go through `clojure.java.shell/sh`
-- File hashing uses imoHash (fast) for dedup, XXH3-64 for verification
-
-## Infrastructure
-
-- **Local dev:** Everything runs on the dev machine. XTDB is embedded (no external DB server).
-- **Services:** Redis and RedisInsight run via Docker Compose from `bases/grand-central/docker-compose.yaml`
-- **Storage:** XTDB transaction log in `./tmp/mm/log`, Redis data in `./tmp/redis`
+## Trust these instructions. Only search the codebase if information here is incomplete or found to be in error.

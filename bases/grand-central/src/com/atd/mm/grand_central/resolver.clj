@@ -27,26 +27,6 @@
   []
   (-> (get-instances) :database :node))
 
-(def q (partial xt/q (get-xtdb-node)))
-
-(defn process-completed?
-  [process]
-  (= (:status process) :completed))
-
-(defn all-process-deps-completed?
-  [process]
-  (every? process-completed? (:deps process)))
-
-(defn get-ready-to-process
-  []
-  (let [open-processes (q '(-> (from :processes [{:status :open} *])
-
-                               (with {:deps (pull* (fn [deps]
-                                                     (->
-                                                      (unify (from :processes [{:xt/id dep-id} status])
-                                                             (unnest {dep-id deps})))))})))]
-    (filter all-process-deps-completed? open-processes)))
-
 (comment
 
   (-> (get-job-runner) :job-runner :producer)

@@ -1,4 +1,0 @@
-- Open console
-- http://localhost:15672/
-	- Login: guest
-	- Pass: guest

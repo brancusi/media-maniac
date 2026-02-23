@@ -170,12 +170,18 @@
 
   - ### Run tests
     - ```bash
-      # Run all tests
-      clj -M:dev:test -m kaocha.runner
+      # Run all tests via Polylith (one-shot, uses Kaocha under the hood)
+      clj -M:poly test :dev
 
-      # Or with Polylith
-      clj -M:poly test
+      # Run all tests via standalone Kaocha
+      clojure -M:dev:test:kaocha
+
+      # Watch mode — re-runs on file change, stays running
+      clojure -M:dev:test:kaocha --watch
       ```
+
+    - Watch mode uses `tests.edn` at the project root. Press Ctrl-C to stop.
+    - SLF4J warnings in output are harmless — ignore them.
 
   - ### Inspect data with Portal
     - Anything sent to `tap>` appears in Portal:

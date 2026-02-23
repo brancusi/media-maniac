@@ -93,6 +93,12 @@
   [file-path]
   (file-utils/get-file-name file-path))
 
+(defn get-file-name-with-ext
+  "Extracts the file name with extension from a file path.
+   Returns nil if the path has no file component."
+  [file-path]
+  (file-utils/get-file-name-with-ext file-path))
+
 (defn ensure-file-exists!
   "Ensures that the file exists. Create all missing dirs along the path and the file."
   [file-path]
@@ -226,7 +232,22 @@
   [url]
   (url-utils/strip-trailing-slash url))
 
+(defn ensure-dir!
+  "Ensures that a directory and all parent directories exist.
+   Returns the directory path as a string."
+  [dir-path]
+  (file-utils/ensure-dir! dir-path))
+
 (defn hash-file
-  "Generates a hash for a file."
+  "Generates an imoHash (128-bit, sampling-based) for a file.
+   Very fast — O(1) read regardless of file size."
   [file]
   (file-utils/hash-file file))
+
+(defn xxh3-128-file
+  "Computes XXH3-128 hash for a local file using xxhsum CLI.
+   Full-file hash — good for integrity verification.
+   128-bit digest practically eliminates collision risk at scale.
+   Requires: `brew install xxhash` on macOS."
+  [path]
+  (file-utils/xxh3-128-file path))

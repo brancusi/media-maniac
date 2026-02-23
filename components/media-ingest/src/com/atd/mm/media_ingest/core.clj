@@ -36,11 +36,12 @@
   (str "'" (str/replace s #"'" "'\"'\"'") "'"))
 
 ;; Public API functions
-(defn xxh3-64-file-local
-  "Returns XXH3-64 hex for a local file using xxhsum -H2.
+(defn xxh3-128-file-local
+  "Returns XXH3-128 hex for a local file using xxhsum -H128.
+   128-bit digest practically eliminates collision risk at scale.
    Requires: `brew install xxhash` on macOS."
   [path]
-  (let [{:keys [exit out err]} (sh/sh "xxhsum" "-H2" path)]
+  (let [{:keys [exit out err]} (sh/sh "xxhsum" "-H128" path)]
     (if (zero? exit)
       (let [hex (-> out str/trim (str/split #"\s+") first)]
         (if (str/blank? hex)
@@ -375,8 +376,8 @@
                :total-size-gb (/ total-size 1e9)
                :duration-hours (/ (reduce + 0 (keep :duration successful)) 3600)}}))
 
-(defn xxh3-64-remote
-  "SSH to NAS and compute XXH3-64 via Docker+xxhsum (-H2).
+(defn xxh3-128-remote
+  "SSH to NAS and compute XXH3-128 via Docker+xxhsum (-H128).
    Args:
      :identity -> SSH key on your Mac (e.g., \"/Users/atd/.ssh/id_ed25519_nas\")
      :user     -> NAS username (e.g., \"aramzadikian\")
@@ -389,13 +390,13 @@
     (throw (ex-info "identity, user, host, dir, and file are required"
                     {:identity identity :user user :host host :dir dir :file file})))
   (let [remote-cmd (format
-                    ;; same container flow, but with -H2 for XXH3
+                    ;; same container flow, but with -H128 for XXH3-128
                     (str "%s run --rm -v %s:/data alpine "
                          "sh -lc %s")
                     docker-bin
                     (pr-str dir)
                     (pr-str (format
-                             "apk add --no-cache xxhash >/dev/null && xxhsum -H2 %s"
+                             "apk add --no-cache xxhash >/dev/null && xxhsum -H128 %s"
                              (pr-str (str "/data/" file)))))
         {:keys [exit out err]}
         (sh/sh "ssh" "-i" identity (str user "@" host) remote-cmd)]

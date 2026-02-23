@@ -8,3 +8,10 @@
         pool-opts (or pool-opts (:pool-opts rds/default-opts))
         conn-opts {:url url :pool-opts pool-opts}]
     (rds/new-producer conn-opts)))
+
+(comment
+
+
+
+  ;;Keep from folding
+  )

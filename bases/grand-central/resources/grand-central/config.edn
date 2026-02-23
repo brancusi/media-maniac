@@ -2,8 +2,8 @@
 
  :local #include "grand-central/.secrets.edn"
 
- :xtdb-config {:log [:local
-                     {:path "./tmp/mm/log"}]}
+ :xtdb-config {:log [:local {:path "./tmp/mm/log"}]
+               :server {:port 5432}}
 
  :job-runner {:redis {:url "redis://localhost:6379"
                       :pool-opts {:max-total-per-key 10

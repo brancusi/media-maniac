@@ -1,7 +1,8 @@
 (ns com.atd.mm.core-utils.impl.file
   (:require
    [clojure.java.io :as io]
-   [clojure.string :refer [split]])
+   [clojure.java.shell :as sh]
+   [clojure.string :refer [split trim]])
   (:import
    [com.dynatrace.hash4j.file FileHashing]))
 
@@ -57,6 +58,16 @@
       (first (split file-name #"\."))
       nil)))
 
+(defn get-file-name-with-ext
+  "Extracts the file name with extension from a file path.
+   Returns nil if the path has no file component.
+
+   Example:
+   (get-file-name-with-ext \"/path/to/sample.MP4\")
+   => \"sample.MP4\""
+  [file-path]
+  (:file-name (get-path-parts file-path)))
+
 (defn path-exists?
   [file-path]
   (println (str "Checking if path exists: " file-path " " (io/resource file-path)))
@@ -80,12 +91,24 @@
   [file-path]
   (.exists (io/file file-path)))
 
+(defn ensure-dir!
+  "Ensures that a directory and all parent directories exist.
+   Uses io/make-parents on a sentinel file to create the full path.
+   Returns the directory path as a string."
+  [dir-path]
+  (let [dir (io/file dir-path)]
+    (io/make-parents (io/file dir "."))
+    (.mkdirs dir)
+    (.getPath dir)))
+
 (defn spit-with-dirs [file-path content]
   (ensure-file-exists! file-path)
   (spit file-path content))
 
 (defn hash-file
-  "Generates a hash for a file."
+  "Generates an imoHash (128-bit, sampling-based) for a file.
+   Very fast — O(1) read regardless of file size.
+   Good for dedup identity, not for integrity verification."
   [file]
   (let [hv (.hashFileTo128Bits
             (FileHashing/imohash1_0_2)
@@ -93,6 +116,21 @@
     (format "%016x%016x"
             (.getMostSignificantBits hv)
             (.getLeastSignificantBits hv))))
+
+(defn xxh3-128-file
+  "Computes XXH3-128 hash for a local file using xxhsum CLI.
+   Full-file hash — linear in file size but very fast (~2-4 GB/s).
+   128-bit digest practically eliminates collision risk at scale.
+   Good for integrity verification.
+   Requires: `brew install xxhash` on macOS."
+  [path]
+  (let [{:keys [exit out err]} (sh/sh "xxhsum" "-H128" (str path))]
+    (if (zero? exit)
+      (let [hex (-> out trim (split #"\s+") first)]
+        (if (clojure.string/blank? hex)
+          (throw (ex-info "xxhsum returned empty output" {:stdout out :stderr err}))
+          hex))
+      (throw (ex-info "xxhsum failed" {:exit exit :stderr err :stdout out})))))
 
 (comment
 

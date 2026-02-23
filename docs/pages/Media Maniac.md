@@ -9,7 +9,7 @@
   - **Extract audio** and send to transcription pipelines for searchable dialogue/narration
   - **Create lossless subclips** so editors can receive only the sections they need, delivered from the cloud
   - **Organize, tag, and transcribe** content so it can be mined efficiently
-  - **Verify file integrity** via hashing (imoHash, XXH3-64, SHA256) across local and remote storage (NAS)
+  - **Verify file integrity** via hashing (imoHash, XXH3-128, SHA256) across local and remote storage (NAS)
 -
 - ## Tech Stack
   - **Language:** Clojure (entire stack)
@@ -25,18 +25,24 @@
 -
 - ## Architecture
   - ### Monorepo Structure (Polylith)
+
+    ![Polylith component map](../diagrams/polylith-component-map.png)
     - **Top namespace:** `com.atd.mm`
     - **1 Base:** `grand-central` — the deployable application entry point, system wiring, models, API
-    - **8 Components:** each with a clean `interface.clj` that delegates to implementation
+    - **9 Components:** each with a clean `interface.clj` that delegates to implementation
       - `config` — Aero-based EDN configuration reader
       - `core-utils` — shared utilities (hashing, string ops, URL parsing, threading macros)
       - `database` — XTDB v2 node lifecycle and schema definitions
       - `http-client` — reusable Hato HTTP client
       - `job-runner` — Goose Redis producer/consumer/worker management
-      - `media-converter` — FFmpeg proxy generation, frame extraction, DAG-based processing pipeline
+      - `media-processor` — FFmpeg operations and multimethod dispatch (`execute-process`) for proxy generation, frame extraction, audio extraction, transcription, and file copy
       - `media-ingest` — SD card analysis, FFprobe metadata extraction, camera/profile detection
+      - `pipeline` — unified pipeline management: templates, job instantiation (prepare), job CRUD, step CRUD, dependency resolution, and Malli schemas
       - `user` — user management (scaffold)
-  - ### System Component Graph
+
+  - ### System Component Graph (Donut System)
+
+    ![Donut system lifecycle](../diagrams/donut-system-lifecycle.png)
     - ```
       config ──────────────┬──► database (XTDB node)
                            ├──► job-runner (Redis producer + workers)
@@ -44,7 +50,10 @@
       http-client ──────────── (standalone)
       ```
     - All wired together in `grand-central/system.clj` via donut.system `ds/ref` declarations
+
   - ### Data Flow
+
+    ![System architecture — end-to-end pipeline](../diagrams/system-architecture.png)
     - ```
       SD Card / Source
         │
@@ -52,19 +61,19 @@
       media-ingest (ffprobe, hash, detect camera & profile)
         │
         ▼
-      Pipeline definition (process rules: proxy, stills, audio, transcribe, copy)
+      Pipeline template (step definitions: proxy, stills, audio, transcribe, copy)
         │
         ▼
-      media-converter/prepare-pipeline (UUID assignment, dep rewiring via Specter)
+      pipeline/prepare-job (UUID assignment, dep rewiring via Specter)
         │
         ▼
-      grand-central model/pipeline (Malli validation → XTDB persistence)
+      pipeline/create-job (Malli validation → XTDB persistence)
         │
         ▼
       job-runner (Goose queues: default, light-process, heavy-process)
         │
         ▼
-      Workers → media-converter/process-rule multimethod dispatch
+      Workers → media-processor/execute-process multimethod dispatch
         │
         ├─► :media/proxy          (FFmpeg proxy generation)
         ├─► :media/extract-stills (frame extraction at intervals)
@@ -72,20 +81,23 @@
         ├─► :media/transcribe     (speech-to-text)
         └─► :media/copy           (lossless copy/subclip)
       ```
+
 -
 - ## Data Model
   - Stored in XTDB v2 as documents. Schema defined in `com.atd.mm.database.schema`
   - ### Entities
     - **Media** — `:media/id`, `:media/original-filename`, `:media/file-type` (video/image/audio/raw), `:media/size-bytes`, timestamps
-    - **Hash** — `:hash/algorithm` (xxh3-64, sha256, md5), `:hash/value` (unique identity for dedup)
+    - **Hash** — `:hash/algorithm` (xxh3-128, sha256, md5), `:hash/value` (unique identity for dedup)
     - **Location** — `:location/type` (sd-card, local-disk, nas, cloud), path, verification status
     - **Transfer Job** — `:transfer/id`, status (pending/in-progress/completed/failed), bytes/files counters
     - **Destination** — named destinations with base path, priority, pattern matching
     - **Metadata** — camera EXIF (make, model, ISO, aperture, shutter), codec, color space, transfer, primaries, picture profile, pixel format, timecode, custom tags
-  - ### Pipeline & Process (Malli specs)
-    - **Pipeline** — `{:xt/id uuid, :src string, :processes [ProcessDefinition]}`
-    - **ProcessDefinition** — `{:xt/id uuid, :status :open|:processing|:completed, :type :media/proxy|:media/extract-audio|..., :deps [uuid], :opts map}`
-    - Processes form a DAG — each can declare dependencies on other processes. The scheduler queries for processes whose status is `:open` and whose deps are all `:completed`
+  - ### Pipeline & Steps (Malli specs)
+    - **PipelineTemplate** — `{:xt/id uuid, :name string, :steps [StepDefinition]}`
+    - **StepDefinition** — `{:id string, :type keyword, :opts map, :deps [string]}`
+    - **PipelineJob** — `{:xt/id uuid, :src string, :template-id uuid, :steps [PipelineStep]}`
+    - **PipelineStep** — `{:xt/id uuid, :pipeline-job-id uuid, :status :open|:processing|:completed, :type keyword, :deps [uuid], :opts map}`
+    - Steps form a DAG — each can declare dependencies on other steps. The scheduler queries for steps whose status is `:open` and whose deps are all `:completed`
 -
 - ## Components Detail
   - ### config
@@ -96,7 +108,7 @@
     - Secrets loaded via `#include "grand-central/.secrets.edn"` (gitignored)
   - ### core-utils
     - Pure utility library (no system component)
-    - File hashing via imoHash (hash4j), XXH3-64
+    - File hashing via imoHash (hash4j), XXH3-128
 
     - URL parsing, Base64, conditional threading (`assoc-conditional`, `transform-conditional`)
     - Dynamic function invocation by namespace path (`call-fn-in-ns`)
@@ -116,12 +128,17 @@
     - 3 queues: `default` (5 threads), `light-process` (5 threads), `heavy-process` (1 thread)
     - Supports: async jobs, scheduled jobs, cron jobs
     - Functions: `queue-job`, `create-cron-job`, `job-by-tx-id`, `clear-all-jobs`
-  - ### media-converter
+  - ### pipeline
+    - Unified component: templates, job preparation, job CRUD, step CRUD, dependency resolution
+    - PipelineTemplate: reusable blueprints with string-based step definitions
+    - `create-job-from-template`: template → prepared job with UUID steps
+    - `get-ready-steps`: dependency-aware scheduling query (XTQL pull\* with status resolution)
+    - Uses Malli for schema validation, Specter for dep rewiring
+    - XTDB tables: `:pipeline-templates`, `:pipeline-jobs`, `:pipeline-steps`
+  - ### media-processor
     - FFmpeg operations: `generate-proxy`, `extract-frames-from-video`, `get-video-duration`
-    - DAG-based pipeline model — processes have typed rules and dependency chains
-    - Multimethod dispatch (`process-rule`) by `:type` keyword
-    - Pipeline preparation: UUID assignment, Specter-based dep rewiring
-    - Uses Malli for pipeline validation
+    - Multimethod dispatch (`execute-process`) by `:type` keyword
+    - Processor implementations: proxy, extract-stills, extract-audio, transcribe, copy
   - ### media-ingest
     - `get-comprehensive-file-info` — main entry, runs ffprobe + all detection
     - Camera detection: Sony, RED, DJI, Canon, Panasonic, Blackmagic
