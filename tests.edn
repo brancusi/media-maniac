@@ -20,4 +20,11 @@
                           "components/media-processor/src"
                           "components/pipeline/src"
                           "components/user/src"
-                          "development/src"]}]}
+                          "development/src"]
+           :kaocha.filter/skip-meta [:integration]}
+
+          {:id           :integration
+           :test-paths   ["components/media-processor/test"]
+           :source-paths ["components/media-processor/src"
+                          "components/core-utils/src"]
+           :kaocha.filter/focus-meta [:integration]}]}
